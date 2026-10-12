@@ -1,64 +1,93 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#111827" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#6658e8" />
+    <meta name="description" content="Grabe reuniones, transcríbalas y resúmalas con IA." />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Nota AI" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <title>AI Dictation</title>
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Nota AI</title>
   </head>
   <body>
-    <div class="app">
-      <aside class="side">
-        <header class="brand">
-          <h1>Dictation</h1>
-          <button id="settings-btn" class="ghost" type="button">Settings</button>
-        </header>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand"><span class="logo" data-icon="sparkles"></span><span>Nota <b>AI</b></span></div>
 
-        <section class="card recorder">
-          <button id="record-btn" type="button"><span class="dot"></span><span id="record-label">Record</span></button>
-          <span id="timer">00:00</span>
-          <p id="status" role="status"></p>
-        </section>
+        <button type="button" class="record js-record">
+          <span class="dot"></span>
+          <span class="js-record-label">Grabar</span>
+          <span class="js-timer"></span>
+        </button>
+        <button id="new-note-btn" class="ghost newnote" type="button"><span data-icon="plus"></span>Nueva nota</button>
 
-        <section class="card calendar">
-          <div class="cal-head">
-            <button id="prev-month" class="ghost icon" type="button" aria-label="Previous month">‹</button>
-            <h2 id="cal-title"></h2>
-            <button id="next-month" class="ghost icon" type="button" aria-label="Next month">›</button>
-          </div>
-          <div id="cal-grid" class="cal-grid"></div>
-          <button id="today-btn" class="ghost small" type="button">Today</button>
-        </section>
+        <nav class="nav" aria-label="Principal">
+          <button type="button" data-view="home"><span data-icon="home"></span>Inicio</button>
+          <button type="button" data-view="notes"><span data-icon="notes"></span>Notas</button>
+          <button type="button" data-view="calendar"><span data-icon="calendar"></span>Calendario</button>
+          <button type="button" data-view="pending"><span data-icon="pending"></span>Pendientes</button>
+        </nav>
 
-        <section class="card pending">
-          <h2>Pending</h2>
-          <ul id="pending" class="plain"></ul>
-        </section>
+        <div class="side-foot">
+          <button type="button" class="js-install" hidden><span data-icon="download"></span>Instalar app</button>
+          <button id="settings-btn" class="js-settings" type="button"><span data-icon="sliders"></span>Ajustes</button>
+        </div>
       </aside>
 
-      <main class="main">
-        <h2 id="day-title" class="day-title"></h2>
-        <ul id="day-notes" class="plain notes"></ul>
-        <article id="detail" class="detail" hidden></article>
-      </main>
+      <div class="main">
+        <header class="topbar">
+          <div class="searchbox">
+            <span data-icon="search"></span>
+            <input id="search" type="search" placeholder="Buscar notas, personas, proyectos…  (Ctrl/⌘ K)" autocomplete="off" />
+          </div>
+          <button id="ask-btn" class="ghost" type="button" title="Hacer una pregunta sobre sus notas"><span data-icon="sparkles"></span><span class="label">Preguntar a la IA</span></button>
+          <button type="button" class="ghost iconbtn js-settings" aria-label="Ajustes"><span data-icon="sliders"></span></button>
+        </header>
+
+        <div id="workspace" class="workspace">
+          <main id="content" class="content"></main>
+          <aside id="editor" class="editor" hidden>
+            <div class="editor-bar">
+              <button id="editor-close" class="ghost small" type="button"><span data-icon="back"></span>Cerrar</button>
+            </div>
+            <article id="detail" class="detail"></article>
+          </aside>
+        </div>
+      </div>
     </div>
+
+    <nav class="tabbar" aria-label="Principal">
+      <button type="button" data-view="home"><span data-icon="home"></span>Inicio</button>
+      <button type="button" data-view="notes"><span data-icon="notes"></span>Notas</button>
+      <button type="button" class="fab js-record" aria-label="Grabar"><span data-icon="mic"></span></button>
+      <button type="button" data-view="calendar"><span data-icon="calendar"></span>Calendario</button>
+      <button type="button" data-view="pending"><span data-icon="pending"></span>Pendientes</button>
+    </nav>
+
+    <div id="toast" role="status" hidden></div>
 
     <dialog id="settings">
       <form method="dialog">
-        <h2>Settings</h2>
-        <label>Groq API key <input id="groq-key" type="password" autocomplete="off" /></label>
-        <label>LLM API key <input id="llm-key" type="password" autocomplete="off" /></label>
-        <label>LLM base URL <input id="llm-url" placeholder="https://api.deepseek.com" /></label>
-        <label>LLM model <input id="llm-model" placeholder="deepseek-chat" /></label>
-        <p class="hint">Keys stay in this browser only (IndexedDB).</p>
+        <h2>Ajustes</h2>
+        <label>Clave de API de Groq <input id="groq-key" type="password" autocomplete="off" /></label>
+        <label>Clave de API del LLM <input id="llm-key" type="password" autocomplete="off" /></label>
+        <label>URL base del LLM <input id="llm-url" placeholder="https://api.deepseek.com" /></label>
+        <label>Modelo del LLM <input id="llm-model" placeholder="deepseek-chat" /></label>
+        <p class="hint">Las claves se guardan solo en este navegador (IndexedDB).</p>
         <div class="row">
-          <button type="button" id="export-btn" class="ghost">Export backup</button>
-          <label class="file-btn ghost">Import backup<input id="import-input" type="file" accept="application/json" hidden /></label>
+          <button type="button" class="ghost js-install" hidden><span data-icon="download"></span>Instalar app</button>
+        </div>
+        <div class="row">
+          <button type="button" id="export-btn" class="ghost">Exportar respaldo</button>
+          <label class="file-btn ghost">Importar respaldo<input id="import-input" type="file" accept="application/json" hidden /></label>
         </div>
         <div class="row end">
-          <button value="cancel" class="ghost">Close</button>
-          <button id="save-settings" value="save">Save</button>
+          <button value="cancel" class="ghost">Cerrar</button>
+          <button id="save-settings" value="save">Guardar</button>
         </div>
       </form>
     </dialog>

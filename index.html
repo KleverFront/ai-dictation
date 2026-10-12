@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111827" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>AI Dictation</title>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="side">
+        <header class="brand">
+          <h1>Dictation</h1>
+          <button id="settings-btn" class="ghost" type="button">Settings</button>
+        </header>
+
+        <section class="card recorder">
+          <button id="record-btn" type="button"><span class="dot"></span><span id="record-label">Record</span></button>
+          <span id="timer">00:00</span>
+          <p id="status" role="status"></p>
+        </section>
+
+        <section class="card calendar">
+          <div class="cal-head">
+            <button id="prev-month" class="ghost icon" type="button" aria-label="Previous month">‹</button>
+            <h2 id="cal-title"></h2>
+            <button id="next-month" class="ghost icon" type="button" aria-label="Next month">›</button>
+          </div>
+          <div id="cal-grid" class="cal-grid"></div>
+          <button id="today-btn" class="ghost small" type="button">Today</button>
+        </section>
+
+        <section class="card pending">
+          <h2>Pending</h2>
+          <ul id="pending" class="plain"></ul>
+        </section>
+      </aside>
+
+      <main class="main">
+        <h2 id="day-title" class="day-title"></h2>
+        <ul id="day-notes" class="plain notes"></ul>
+        <article id="detail" class="detail" hidden></article>
+      </main>
+    </div>
+
+    <dialog id="settings">
+      <form method="dialog">
+        <h2>Settings</h2>
+        <label>Groq API key <input id="groq-key" type="password" autocomplete="off" /></label>
+        <label>LLM API key <input id="llm-key" type="password" autocomplete="off" /></label>
+        <label>LLM base URL <input id="llm-url" placeholder="https://api.deepseek.com" /></label>
+        <label>LLM model <input id="llm-model" placeholder="deepseek-chat" /></label>
+        <p class="hint">Keys stay in this browser only (IndexedDB).</p>
+        <div class="row">
+          <button type="button" id="export-btn" class="ghost">Export backup</button>
+          <label class="file-btn ghost">Import backup<input id="import-input" type="file" accept="application/json" hidden /></label>
+        </div>
+        <div class="row end">
+          <button value="cancel" class="ghost">Close</button>
+          <button id="save-settings" value="save">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

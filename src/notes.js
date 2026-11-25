@@ -45,6 +45,8 @@ export const blankNote = (extra = {}) => ({
   tags: [],
   participants: '',
   audio: null,
+  // Later recordings added with "Seguir grabando": [{ blob, at, transcribed }].
+  audioParts: [],
   transcript: '',
   summary: '',
   tasks: [],

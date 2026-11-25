@@ -62,5 +62,12 @@ export async function startRecording(source = 'mic') {
   })
 
   recorder.start(1000)
-  return { stop: () => (recorder.state !== 'inactive' && recorder.stop(), done) }
+  return {
+    stop: () => (recorder.state !== 'inactive' && recorder.stop(), done),
+    pause: () => recorder.state === 'recording' && recorder.pause(),
+    resume: () => recorder.state === 'paused' && recorder.resume(),
+    get paused() {
+      return recorder.state === 'paused'
+    },
+  }
 }

@@ -34,6 +34,8 @@ const ICONS = {
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/>',
   stop: '<rect width="12" height="12" x="6" y="6" rx="2"/>',
+  pause: '<rect width="4" height="14" x="6" y="5" rx="1"/><rect width="4" height="14" x="14" y="5" rx="1"/>',
+  play: '<path d="M7 5v14l11-7Z"/>',
   plus: '<path d="M5 12h14M12 5v14"/>',
   sliders: '<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>',
   back: '<path d="m12 19-7-7 7-7M19 12H5"/>',
@@ -666,12 +668,14 @@ const dataUrlToBlob = async (url) => (await fetch(url)).blob()
 const serialize = async (n) => ({
   ...n,
   audio: n.audio ? await blobToDataUrl(n.audio) : null,
+  audioParts: await Promise.all((n.audioParts ?? []).map(async (a) => ({ ...a, blob: await blobToDataUrl(a.blob) }))),
   attachments: await Promise.all((n.attachments ?? []).map(async (a) => ({ ...a, blob: await blobToDataUrl(a.blob) }))),
 })
 const deserialize = async ({ id, ...o }) => ({
   ...blankNote(),
   ...o,
   audio: o.audio ? await dataUrlToBlob(o.audio) : null,
+  audioParts: await Promise.all((o.audioParts ?? []).map(async (a) => ({ ...a, blob: await dataUrlToBlob(a.blob) }))),
   attachments: await Promise.all((o.attachments ?? []).map(async (a) => ({ ...a, blob: await dataUrlToBlob(a.blob) }))),
 })
 
@@ -696,19 +700,47 @@ $('import-input').onchange = async (e) => {
 
 // ---------- recording + creating ----------
 function paintRecording(recording) {
+  const paused = recording && session?.paused
   document.querySelectorAll('.js-record').forEach((b) => b.classList.toggle('recording', recording))
+  document.querySelectorAll('.js-record').forEach((b) => b.classList.toggle('paused', !!paused))
   document.querySelectorAll('.js-record-label').forEach((l) => (l.textContent = recording ? 'Detener' : 'Grabar'))
   document.querySelectorAll('.fab [data-icon]').forEach((i) => (i.innerHTML = svg(recording ? 'stop' : 'mic')))
+  document.querySelectorAll('.js-pause').forEach((b) => {
+    b.hidden = !recording
+    b.querySelector('[data-icon]').innerHTML = svg(paused ? 'play' : 'pause')
+    b.querySelector('.js-pause-label').textContent = paused ? 'Reanudar' : 'Pausar'
+  })
+  document.querySelectorAll('.js-source').forEach((s) => (s.disabled = recording))
   if (!recording) document.querySelectorAll('.js-timer').forEach((t) => (t.textContent = ''))
 }
 
+// The timer only counts recorded time, so pauses do not add up.
+let elapsed = 0
+let runningSince = 0
 function startTimer() {
-  const t0 = Date.now()
+  elapsed = 0
+  runningSince = Date.now()
   timerId = setInterval(() => {
-    const s = Math.floor((Date.now() - t0) / 1000)
+    const s = Math.floor((elapsed + (runningSince ? Date.now() - runningSince : 0)) / 1000)
     document.querySelectorAll('.js-timer').forEach((t) => (t.textContent = `${pad(Math.floor(s / 60))}:${pad(s % 60)}`))
   }, 500)
 }
+
+function togglePause() {
+  if (!session) return
+  if (session.paused) {
+    session.resume()
+    runningSince = Date.now()
+    setStatus(session.noteId ? 'Grabando (se añade a la nota)...' : 'Grabando...', { sticky: true })
+  } else {
+    session.pause()
+    elapsed += Date.now() - runningSince
+    runningSince = 0
+    setStatus('En pausa. Pulse Reanudar para seguir en la misma grabación.', { sticky: true })
+  }
+  paintRecording(true)
+}
+document.querySelectorAll('.js-pause').forEach((b) => (b.onclick = togglePause))
 
 // What to record: mic, PC audio (Zoom, Meet...) or both. Remembered between sessions.
 let recordSource = localStorage.getItem('recordSource') in SOURCES ? localStorage.getItem('recordSource') : 'mic'
@@ -721,7 +753,8 @@ document.querySelectorAll('.js-source').forEach((sel) => {
   }
 })
 
-async function toggleRecording() {
+// noteId: keep recording into an existing note instead of creating a new one.
+async function toggleRecording(noteId = null) {
   if (session) return finishRecording()
   if (recordSource !== 'mic') setStatus('Elija "Toda la pantalla" y active "Compartir audio del sistema".', { sticky: true })
   try {
@@ -730,22 +763,31 @@ async function toggleRecording() {
     const msg = err.name === 'NotAllowedError' ? 'Permiso denegado o se canceló el compartir.' : err.message
     return setStatus(`No se pudo grabar: ${msg}`)
   }
-  document.querySelectorAll('.js-source').forEach((s) => (s.disabled = true))
+  session.noteId = typeof noteId === 'number' ? noteId : null
   paintRecording(true)
-  setStatus('Grabando...', { sticky: true })
+  setStatus(session.noteId ? 'Grabando (se añade a la nota)...' : 'Grabando...', { sticky: true })
   startTimer()
+  renderEditor()
 }
-document.querySelectorAll('.js-record').forEach((b) => (b.onclick = toggleRecording))
+document.querySelectorAll('.js-record').forEach((b) => (b.onclick = () => toggleRecording()))
 
 async function finishRecording() {
   clearInterval(timerId)
+  const { noteId } = session
   const blob = await session.stop()
   session = null
   paintRecording(false)
-  document.querySelectorAll('.js-source').forEach((s) => (s.disabled = false))
 
   // Save the audio first: if the APIs fail we never lose the recording.
-  const id = await notes.add(blankNote({ audio: blob, type: 'meeting' }))
+  let id = noteId
+  if (id && (await notes.get(id))) {
+    await patchNote(id, (n) => {
+      if (!n.audio) n.audio = blob
+      else (n.audioParts ??= []).push({ blob, at: Date.now(), transcribed: false })
+    })
+  } else {
+    id = await notes.add(blankNote({ audio: blob, type: 'meeting' }))
+  }
   await goToNote(await notes.get(id))
   await processNote(id)
 }
@@ -779,6 +821,16 @@ async function processNote(id) {
       setStatus('Transcribiendo...', { sticky: true })
       const text = await transcribe(note.audio, s.groqKey)
       note = await patchNote(id, (n) => (n.transcript = text))
+    }
+    // Segments added later are transcribed one by one and appended in order.
+    for (const [i, part] of (note.audioParts ?? []).entries()) {
+      if (part.transcribed) continue
+      setStatus('Transcribiendo la parte nueva...', { sticky: true })
+      const text = await transcribe(part.blob, s.groqKey)
+      note = await patchNote(id, (n) => {
+        n.transcript = [n.transcript, text].filter((t) => t?.trim()).join('\n\n[Continuación]\n')
+        n.audioParts[i].transcribed = true
+      })
     }
     const meta = [
       `Type: ${typeLabel(note.type)}`,
@@ -1059,6 +1111,10 @@ async function renderEditor() {
           await processNote(n.id)
         },
       }, h('span', { 'data-icon': 'sparkles' }), isStructured(s) ? 'Regenerar con IA' : 'Organizar con IA'),
+      session
+        ? null
+        : h('button', { type: 'button', class: 'ghost small', title: 'Graba más audio y lo añade a esta misma nota', onclick: () => toggleRecording(n.id) },
+            h('span', { 'data-icon': 'mic' }), n.audio ? 'Seguir grabando' : 'Grabar aquí'),
       h('button', { type: 'button', class: 'ghost small', onclick: () => fileInput.click() }, 'Adjuntar'),
       h('label', { class: 'remind' },
         h('span', {}, 'Recordarme'),
@@ -1086,6 +1142,11 @@ async function renderEditor() {
     isStructured(s) && s.inferred?.length ? listField(n, 'inferred', 'Inferido (no se dijo explícitamente)', 'inferred') : null,
     n.audio || n.transcript ? transcriptBox : null,
     n.audio ? h('audio', { controls: true, src: (audioUrl = URL.createObjectURL(n.audio)) }) : null,
+    ...(n.audioParts ?? []).map((a, i) => {
+      const url = URL.createObjectURL(a.blob)
+      objectUrls.push(url)
+      return h('div', { class: 'audio-part' }, h('p', { class: 'hint' }, `Continuación ${i + 1} · ${fmtTime(a.at)}`), h('audio', { controls: true, src: url }))
+    }),
   ].filter(Boolean))
   paintIcons(el)
   el.querySelectorAll('textarea').forEach(autosize)

@@ -110,6 +110,8 @@ input[type='checkbox'] { accent-color: var(--accent); width: 17px; height: 17px;
 .record .dot { width: 9px; height: 9px; border-radius: 50%; background: #fff; }
 .record .js-timer { margin-left: auto; font-variant-numeric: tabular-nums; opacity: 0.85; font-weight: 500; }
 .record.recording { background: var(--danger); }
+.source-select { font-size: 13px; color: var(--fg); color-scheme: light dark; padding: 6px 10px; }
+.source-select.mobile-only { display: none; }
 .record.recording .dot { animation: pulse 1.4s ease-in-out infinite; }
 .newnote { justify-content: flex-start; }
 
@@ -331,6 +333,7 @@ dialog .file-btn { display: inline-flex; margin-bottom: 0; color: var(--fg); }
 }
 
 @media (max-width: 800px) {
+  .source-select.mobile-only { display: block; max-width: 130px; }
   .shell { grid-template-columns: minmax(0, 1fr); }
   .sidebar { display: none; }
   .topbar { padding: 0 14px; }

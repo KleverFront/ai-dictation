@@ -1,6 +1,6 @@
 import './style.css'
 import { notes, settings, requestPersistence } from './db.js'
-import { startRecording } from './recorder.js'
+import { startRecording, SOURCES } from './recorder.js'
 import { transcribe, summarize, ask } from './ai.js'
 import { search } from './search.js'
 import { buildDigest } from './digest.js'
@@ -710,13 +710,27 @@ function startTimer() {
   }, 500)
 }
 
+// What to record: mic, PC audio (Zoom, Meet...) or both. Remembered between sessions.
+let recordSource = localStorage.getItem('recordSource') in SOURCES ? localStorage.getItem('recordSource') : 'mic'
+document.querySelectorAll('.js-source').forEach((sel) => {
+  sel.replaceChildren(...Object.entries(SOURCES).map(([v, label]) => new Option(label, v, false, v === recordSource)))
+  sel.onchange = () => {
+    recordSource = sel.value
+    localStorage.setItem('recordSource', recordSource)
+    document.querySelectorAll('.js-source').forEach((o) => (o.value = recordSource))
+  }
+})
+
 async function toggleRecording() {
   if (session) return finishRecording()
+  if (recordSource !== 'mic') setStatus('Elija "Toda la pantalla" y active "Compartir audio del sistema".', { sticky: true })
   try {
-    session = await startRecording()
+    session = await startRecording(recordSource)
   } catch (err) {
-    return setStatus(`Error de micrófono: ${err.message}`)
+    const msg = err.name === 'NotAllowedError' ? 'Permiso denegado o se canceló el compartir.' : err.message
+    return setStatus(`No se pudo grabar: ${msg}`)
   }
+  document.querySelectorAll('.js-source').forEach((s) => (s.disabled = true))
   paintRecording(true)
   setStatus('Grabando...', { sticky: true })
   startTimer()
@@ -728,6 +742,7 @@ async function finishRecording() {
   const blob = await session.stop()
   session = null
   paintRecording(false)
+  document.querySelectorAll('.js-source').forEach((s) => (s.disabled = false))
 
   // Save the audio first: if the APIs fail we never lose the recording.
   const id = await notes.add(blankNote({ audio: blob, type: 'meeting' }))

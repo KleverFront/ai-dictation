@@ -11,6 +11,7 @@ const todayLine = () => {
 
 const summaryPrompt = () => `You are a meticulous note-taker. Reply with ONLY a valid json object with these keys:
 - "title": short title, max 8 words.
+- "category": the main theme of the note in 1-3 words (e.g. "Ventas", "Clientes", "Salud", "Proyecto Odoo"). If one of the "Existing themes" fits, reuse it with the exact same spelling.
 - "overview": 2-3 sentences on what the note or meeting was about.
 - "points": array of the important things that were discussed, one sentence each.
 - "decisions": array of decisions that were explicitly made.
@@ -21,7 +22,7 @@ Rules:
 - Be faithful. Never change, soften, exaggerate or embellish what was said. Keep names, numbers, dates and amounts exactly as in the text.
 - Only put in "points", "decisions" and "tasks" what the text actually says. If you are not sure, put it in "inferred" instead of guessing. Never invent owners, agreements or dates.
 - "due" is the deadline exactly as it was said. "dueDate" is YYYY-MM-DD and ONLY when a deadline was stated and can be computed exactly from today, which is ${todayLine()} (for example "mañana" or "el viernes"). Otherwise null.
-- Lines at the top starting with "Type:", "Project:" or "Participants:" are metadata supplied by the user, not part of the speech.
+- Lines at the top starting with "Type:", "Project:", "Participants:" or "Existing themes:" are metadata supplied by the user, not part of the speech.
 - Write in the same language as the text.
 - Use empty arrays when there is nothing for a key.`
 
@@ -71,6 +72,7 @@ const isoDate = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ?
 function normalize(raw) {
   return {
     title: String(raw.title ?? '').trim(),
+    category: String(raw.category ?? '').trim().slice(0, 40),
     overview: String(raw.overview ?? '').trim(),
     points: asArray(raw.points).map(String),
     decisions: asArray(raw.decisions).map(String),

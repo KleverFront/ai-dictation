@@ -207,6 +207,14 @@ input[type='checkbox'] { accent-color: var(--accent); width: 17px; height: 17px;
 .note .snippet { color: var(--muted); font-size: 13.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .chip { flex: none; font-size: 11.5px; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 9px; border-radius: 7px; max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge { flex: none; font-size: 11.5px; font-weight: 600; color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); padding: 2px 9px; border-radius: 7px; }
+/* fijadas + temas */
+.pin { flex: none; margin-left: auto; display: inline-flex; color: var(--muted); opacity: 0.35; border-radius: 6px; padding: 1px; cursor: pointer; }
+.note:hover .pin, .pin:focus-visible { opacity: 0.8; }
+.pin.on, .pin-toggle.on { color: #e9a400; opacity: 1; }
+.pin.on svg, .pin-toggle.on svg { fill: currentColor; }
+.chip.theme { color: var(--fg); background: var(--hover); }
+.sort { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.sort select { color: var(--fg); color-scheme: light dark; padding: 6px 10px; }
 .chip-btn { background: var(--accent-soft); color: var(--accent); border: 0; border-radius: 999px; padding: 4px 13px; font-size: 13px; }
 
 .task { display: flex; gap: 10px; align-items: center; padding: 7px 4px; border-radius: 9px; }

@@ -9,6 +9,7 @@ function fieldsOf(n) {
     ['título', noteTitle(n), 5],
     ['etiquetas', (n.tags ?? []).join(' '), 4],
     ['proyecto', n.project ?? '', 4],
+    ['tema', n.category ?? '', 4],
     ['participantes', n.participants ?? '', 3],
     ['resumen', summaryText, 3],
     ['pendientes', (n.tasks ?? []).map((t) => `${t.text} ${t.owner ?? ''}`).join(' '), 3],

@@ -42,6 +42,8 @@ export const blankNote = (extra = {}) => ({
   eventAt: null,
   type: 'note',
   project: '',
+  category: '', // theme used to group and sort notes (the AI suggests one)
+  pinned: false, // favorite: shown first and in "Fijadas"
   tags: [],
   participants: '',
   audio: null,

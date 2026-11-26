@@ -36,6 +36,7 @@ const ICONS = {
   stop: '<rect width="12" height="12" x="6" y="6" rx="2"/>',
   pause: '<rect width="4" height="14" x="6" y="5" rx="1"/><rect width="4" height="14" x="14" y="5" rx="1"/>',
   play: '<path d="M7 5v14l11-7Z"/>',
+  star: '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8-6.2-3.2-6.2 3.2L7 14.2 2 9.3l6.9-1Z"/>',
   plus: '<path d="M5 12h14M12 5v14"/>',
   sliders: '<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>',
   back: '<path d="m12 19-7-7 7-7M19 12H5"/>',
@@ -76,6 +77,8 @@ const state = {
   openId: null, // note open in the side editor
   filterType: 'all',
   filterProject: '',
+  filterCategory: '', // '' = all, '*' = only pinned, otherwise a theme
+  sortBy: localStorage.getItem('sortBy') === 'category' ? 'category' : 'date', // date | category
   digest: 'day',
   query: '',
   answer: null, // { question } | { question, answer, sources } | { question, error }
@@ -198,6 +201,37 @@ async function goToNote(n) {
   await refresh()
 }
 
+// ---------- pinned + themes ----------
+const NO_THEME = 'Sin tema'
+const themeOf = (n) => n.category?.trim() || ''
+const themesInUse = () => [...new Set(state.notes.map(themeOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, LOCALE))
+
+async function togglePin(id) {
+  await patchNote(id, (x) => (x.pinned = !x.pinned))
+  renderContent()
+  await renderEditor()
+}
+
+const pinBtn = (n) => {
+  const el = h('span', {
+    role: 'button',
+    tabindex: '0',
+    class: `pin ${n.pinned ? 'on' : ''}`,
+    title: n.pinned ? 'Quitar de fijadas' : 'Fijar / favorita',
+    'aria-label': n.pinned ? 'Quitar de fijadas' : 'Fijar',
+    onclick: (e) => (e.stopPropagation(), togglePin(n.id)),
+    onkeydown: (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        e.stopPropagation()
+        togglePin(n.id)
+      }
+    },
+  })
+  el.innerHTML = svg('star')
+  return el
+}
+
 // ---------- shared list pieces ----------
 function noteRow(n, { day = null } = {}) {
   const pend = pendingOf(n).length
@@ -213,12 +247,14 @@ function noteRow(n, { day = null } = {}) {
         h('strong', {}, noteTitle(n)),
         snippet ? h('span', { class: 'snippet' }, snippet) : null,
       ),
+      themeOf(n) ? h('span', { class: 'chip theme' }, themeOf(n)) : null,
       n.type && n.type !== 'note' ? h('span', { class: 'chip' }, typeLabel(n.type)) : null,
       n.project ? h('span', { class: 'chip' }, n.project) : null,
       n.attachments?.length ? h('span', { class: 'chip' }, `${n.attachments.length} archivo${n.attachments.length > 1 ? 's' : ''}`) : null,
       reminderToday ? h('span', { class: 'chip' }, `Recordatorio ${fmtTime(n.remindAt)}`) : null,
       dueToday ? h('span', { class: 'badge' }, `${dueToday} vence${dueToday > 1 ? 'n' : ''}`) : null,
       pend && !dueToday ? h('span', { class: 'badge' }, `${pend} pendiente${pend > 1 ? 's' : ''}`) : null,
+      pinBtn(n),
     ),
   )
 }
@@ -290,6 +326,9 @@ function homeView() {
         pending.length > shown.length ? linkBtn('Ver todos', () => navigate('pending')) : null,
       ),
     ),
+    state.notes.some((n) => n.pinned)
+      ? card('Fijadas', noteList(state.notes.filter((n) => n.pinned), {}, ''), linkBtn('Ver fijadas', () => ((state.filterCategory = '*'), navigate('notes'))))
+      : null,
     card('Recientes', noteList(state.notes.slice(0, 5), {}, 'Aún no hay notas. Grabe una reunión o escriba una.'), linkBtn('Todas las notas', () => navigate('notes'))),
     h('div', { class: 'row' },
       h('button', { type: 'button', class: 'ghost small', onclick: () => openDigest('day') }, 'Resumen de hoy'),
@@ -304,17 +343,53 @@ function notesView() {
   const projects = [...new Set(state.notes.map((n) => n.project).filter(Boolean))].sort()
   const chip = (label, active, onclick) => h('button', { type: 'button', class: `fchip ${active ? 'on' : ''}`, onclick }, label)
 
+  const themes = themesInUse()
+  const fc = state.filterCategory
   const list = state.notes.filter(
-    (n) => (state.filterType === 'all' || (n.type ?? 'note') === state.filterType) && (!state.filterProject || n.project === state.filterProject),
+    (n) =>
+      (state.filterType === 'all' || (n.type ?? 'note') === state.filterType) &&
+      (!state.filterProject || n.project === state.filterProject) &&
+      (!fc || (fc === '*' ? n.pinned : fc === NO_THEME ? !themeOf(n) : themeOf(n) === fc)),
   )
+
+  // Fijadas always on top; the rest grouped by day or by theme (A-Z, "Sin tema" last).
+  const pinned = fc === '*' ? [] : list.filter((n) => n.pinned)
+  const rest = fc === '*' ? list : list.filter((n) => !n.pinned)
   const groups = new Map()
-  for (const n of list) {
-    const k = dayKey(when(n))
-    groups.set(k, [...(groups.get(k) ?? []), n])
+  if (state.sortBy === 'category') {
+    for (const t of [...themes, NO_THEME]) groups.set(t, [])
+    for (const n of rest) groups.get(themeOf(n) || NO_THEME).push(n)
+    for (const [k, v] of groups) if (!v.length) groups.delete(k)
+  } else {
+    for (const n of rest) {
+      const k = dayKey(when(n))
+      groups.set(k, [...(groups.get(k) ?? []), n])
+    }
+  }
+  const groupTitle = (k) => (state.sortBy === 'category' ? k : dayLabel(k))
+  const setSort = (v) => {
+    state.sortBy = v
+    localStorage.setItem('sortBy', v)
+    renderContent()
   }
 
   return h('div', { class: 'view' },
-    pageHead('Notas', 'Todo lo que ha grabado o escrito.', h('button', { type: 'button', onclick: () => createNote() }, 'Nueva nota')),
+    pageHead('Notas', 'Todo lo que ha grabado o escrito.',
+      h('label', { class: 'sort' }, h('span', {}, 'Ordenar'),
+        h('select', { onchange: (e) => setSort(e.target.value) },
+          h('option', { value: 'date', selected: state.sortBy === 'date' }, 'Por fecha'),
+          h('option', { value: 'category', selected: state.sortBy === 'category' }, 'Por tema'),
+        ),
+      ),
+      h('button', { type: 'button', onclick: () => createNote() }, 'Nueva nota')),
+    h('div', { class: 'filters' },
+      h('div', { class: 'chips' },
+        chip('Todos los temas', !fc, () => ((state.filterCategory = ''), renderContent())),
+        state.notes.some((n) => n.pinned) || fc === '*' ? chip('★ Fijadas', fc === '*', () => ((state.filterCategory = '*'), renderContent())) : null,
+        themes.map((t) => chip(t, fc === t, () => ((state.filterCategory = t), renderContent()))),
+        themes.length && state.notes.some((n) => !themeOf(n)) ? chip(NO_THEME, fc === NO_THEME, () => ((state.filterCategory = NO_THEME), renderContent())) : null,
+      ),
+    ),
     typesInUse.length > 1 || projects.length
       ? h('div', { class: 'filters' },
           typesInUse.length > 1
@@ -332,7 +407,10 @@ function notesView() {
         )
       : null,
     list.length
-      ? [...groups].map(([key, items]) => h('section', { class: 'group' }, h('h3', {}, dayLabel(key)), noteList(items, {})))
+      ? [
+          pinned.length ? h('section', { class: 'group' }, h('h3', {}, '★ Fijadas'), noteList(pinned, {})) : null,
+          ...[...groups].map(([key, items]) => h('section', { class: 'group' }, h('h3', {}, `${groupTitle(key)}${state.sortBy === 'category' ? ` · ${items.length}` : ''}`), noteList(items, {}))),
+        ]
       : h('div', { class: 'card empty-card' }, 'Ninguna nota coincide. Grabe una reunión o escriba una.'),
   )
 }
@@ -836,6 +914,7 @@ async function processNote(id) {
       `Type: ${typeLabel(note.type)}`,
       note.project && `Project: ${note.project}`,
       note.participants && `Participants: ${note.participants}`,
+      themesInUse().length && `Existing themes: ${themesInUse().join(', ')}`,
     ].filter(Boolean)
     const source = [note.transcript, note.body && (note.transcript ? `Additional notes:\n${note.body}` : note.body)]
       .filter(Boolean)
@@ -852,6 +931,8 @@ async function processNote(id) {
       // Never touches your text; tasks are merged so reprocessing does not duplicate them.
       n.tasks = mergeTasks(n.tasks, summary.tasks)
       n.summary = summary
+      // The AI theme is only a suggestion: never overwrite one the user set.
+      if (!n.category?.trim() && summary.category) n.category = summary.category
     })
     setStatus('Borrador listo: revíselo y confírmelo.')
   } catch (err) {
@@ -1035,6 +1116,10 @@ function metaView(n) {
         },
       }),
     ),
+    h('label', {}, h('span', {}, 'Tema'),
+      h('input', { value: n.category ?? '', list: 'themes', placeholder: 'La IA lo sugiere', oninput: patch('category') }),
+      h('datalist', { id: 'themes' }, themesInUse().map((t) => h('option', { value: t }))),
+    ),
     h('label', {}, h('span', {}, 'Proyecto'),
       h('input', { value: n.project ?? '', list: 'projects', placeholder: 'Opcional', oninput: patch('project') }),
       h('datalist', { id: 'projects' }, projects.map((p) => h('option', { value: p }))),
@@ -1111,6 +1196,8 @@ async function renderEditor() {
           await processNote(n.id)
         },
       }, h('span', { 'data-icon': 'sparkles' }), isStructured(s) ? 'Regenerar con IA' : 'Organizar con IA'),
+      h('button', { type: 'button', class: `ghost small pin-toggle ${n.pinned ? 'on' : ''}`, onclick: () => togglePin(n.id) },
+        h('span', { 'data-icon': 'star' }), n.pinned ? 'Fijada' : 'Fijar'),
       session
         ? null
         : h('button', { type: 'button', class: 'ghost small', title: 'Graba más audio y lo añade a esta misma nota', onclick: () => toggleRecording(n.id) },

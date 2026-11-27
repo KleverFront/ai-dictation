@@ -307,6 +307,27 @@ audio { width: 100%; height: 36px; }
 .answer .overview { font-size: 15.5px; }
 
 /* ---------- toast + tabbar ---------- */
+#progress {
+  position: fixed; top: 16px; right: 16px; z-index: 45;
+  width: min(92vw, 360px);
+  background: var(--surface); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 14px;
+  padding: 12px 14px; display: grid; gap: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+#progress[hidden] { display: none; }
+.progress-head { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; }
+.progress-head .js-progress-label { flex: 1; min-width: 0; }
+.progress-head b { font-variant-numeric: tabular-nums; color: var(--accent); }
+.spinner { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 2px solid var(--accent-soft); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.progress-bar { position: relative; height: 8px; border-radius: 99px; background: var(--accent-soft); overflow: hidden; }
+.progress-bar span { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); border-radius: inherit; transition: width 0.4s ease; }
+/* moving shine so long AI steps still look alive */
+.progress-bar span::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent); animation: shine 1.4s linear infinite; }
+@keyframes shine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+#progress small { color: var(--muted); font-size: 12px; }
+
 #toast {
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
   z-index: 40; max-width: min(92vw, 520px);
@@ -331,7 +352,7 @@ dialog .file-btn { display: inline-flex; margin-bottom: 0; color: var(--fg); }
 @keyframes pulse { 50% { opacity: 0.3; transform: scale(0.8); } }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) {
-  .detail, .record.recording .dot { animation: none !important; }
+  .detail, .record.recording .dot, .spinner, .progress-bar span::after { animation: none !important; }
   * { transition: none !important; }
 }
 
@@ -346,6 +367,7 @@ dialog .file-btn { display: inline-flex; margin-bottom: 0; color: var(--fg); }
 }
 
 @media (max-width: 800px) {
+  #progress { top: calc(10px + env(safe-area-inset-top)); left: 50%; right: auto; transform: translateX(-50%); }
   .source-select.mobile-only { display: block; max-width: 130px; }
   .pause-btn.mobile-only { display: inline-flex; }
   .shell { grid-template-columns: minmax(0, 1fr); }
@@ -374,7 +396,7 @@ dialog .file-btn { display: inline-flex; margin-bottom: 0; color: var(--fg); }
 
 /* ---------- print / PDF ---------- */
 @media print {
-  .sidebar, .topbar, .tabbar, #toast, .editor-bar, .toolbar, .meta, .x, .banner, #add-task, audio, .page-head .row { display: none !important; }
+  .sidebar, .topbar, .tabbar, #toast, #progress, .editor-bar, .toolbar, .meta, .x, .banner, #add-task, audio, .page-head .row { display: none !important; }
   body { background: #fff; color: #000; }
   .shell, .workspace, .workspace.with-editor { display: block; }
   .workspace.with-editor .content { display: none; }

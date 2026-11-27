@@ -22,7 +22,9 @@ Rules:
 - Be faithful. Never change, soften, exaggerate or embellish what was said. Keep names, numbers, dates and amounts exactly as in the text.
 - Only put in "points", "decisions" and "tasks" what the text actually says. If you are not sure, put it in "inferred" instead of guessing. Never invent owners, agreements or dates.
 - "due" is the deadline exactly as it was said. "dueDate" is YYYY-MM-DD and ONLY when a deadline was stated and can be computed exactly from today, which is ${todayLine()} (for example "mañana" or "el viernes"). Otherwise null.
-- Lines at the top starting with "Type:", "Project:", "Participants:" or "Existing themes:" are metadata supplied by the user, not part of the speech.
+- Lines at the top starting with "Type:", "Project:", "Participants:", "Existing themes:", "Part:" or "Merged parts:" are metadata supplied by the app, not part of the speech.
+- "Part: i of N" means the text is one piece of a longer recording: summarize only this piece.
+- "Merged parts:" means the text is made of summaries of consecutive parts of one long recording: combine them into ONE summary of the whole recording, keep every concrete decision and task, and remove repetitions.
 - Write in the same language as the text.
 - Use empty arrays when there is nothing for a key.`
 
@@ -50,20 +52,58 @@ async function callLLM(messages, { apiKey, baseUrl, model }) {
   return (await res.json()).choices[0].message.content
 }
 
-export async function transcribe(blob, apiKey) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// Seconds to wait after a 429: the retry-after header, or "try again in 1m30.5s" in the body.
+function waitSeconds(res, body) {
+  const header = Number(res.headers.get('retry-after'))
+  if (header > 0) return header
+  const m = /try again in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/i.exec(body)
+  const s = m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0
+  return s > 0 ? Math.ceil(s) : 60
+}
+
+// Groq allows ~2 h of audio per hour on the free tier. When it says "wait", we wait and retry
+// instead of failing; onWait(seconds) lets the UI show the countdown.
+export async function transcribe(blob, apiKey, { onWait } = {}) {
   if (!apiKey) throw new Error('Falta la clave de API de Groq (Ajustes).')
+  for (let attempt = 1; ; attempt++) {
+    let res
+    try {
+      res = await transcribeOnce(blob, apiKey)
+    } catch (err) {
+      // Network hiccup: retry a few times before giving up (the audio stays saved anyway).
+      if (attempt >= 4) throw new Error(`Sin conexión con Groq: ${err.message}`)
+      await sleep(5000 * attempt)
+      continue
+    }
+    if (res.ok) return (await res.json()).text ?? ''
+    const body = await res.text()
+    if (res.status === 413) throw new Error('Este audio pesa más de 25 MB y Groq no lo acepta. Las grabaciones nuevas se parten solas en trozos de 15 min.')
+    if ((res.status === 429 || res.status >= 500) && attempt < 12) {
+      const secs = res.status === 429 ? waitSeconds(res, body) : 10 * attempt
+      for (let left = secs; left > 0; left--) {
+        onWait?.(left)
+        await sleep(1000)
+      }
+      onWait?.(0)
+      continue
+    }
+    throw new Error(`Falló la transcripción (${res.status}): ${body}`)
+  }
+}
+
+function transcribeOnce(blob, apiKey) {
   const form = new FormData()
   form.append('file', blob, `audio.${extensionFor(blob.type)}`)
   form.append('model', GROQ_MODEL)
   form.append('response_format', 'json')
 
-  const res = await fetch(GROQ_URL, {
+  return fetch(GROQ_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
   })
-  if (!res.ok) throw new Error(`Falló la transcripción (${res.status}): ${await res.text()}`)
-  return (await res.json()).text
 }
 
 const asArray = (v) => (Array.isArray(v) ? v.filter(Boolean) : [])
@@ -99,6 +139,54 @@ export async function summarize(text, opts) {
     // Model ignored the format: keep its text instead of losing the summary.
     return normalize({ title: 'Nota', overview: content })
   }
+}
+
+// ~40k characters is about 45 min of speech: long recordings are summarized in pieces first.
+const CHUNK_CHARS = 40000
+
+export function splitForSummary(text) {
+  const out = []
+  let rest = text.trim()
+  while (rest.length > CHUNK_CHARS * 1.2) {
+    // Cut at the last sentence end before the limit so no sentence is split in two.
+    const window = rest.slice(0, CHUNK_CHARS)
+    const cut = Math.max(window.lastIndexOf('. '), window.lastIndexOf('? '), window.lastIndexOf('! '), window.lastIndexOf('\n'))
+    const at = cut > CHUNK_CHARS * 0.6 ? cut + 1 : CHUNK_CHARS
+    out.push(rest.slice(0, at).trim())
+    rest = rest.slice(at).trim()
+  }
+  if (rest) out.push(rest)
+  return out
+}
+
+const partToText = (s, i) =>
+  [
+    `## Part ${i + 1}`,
+    s.overview,
+    s.points.length && `Points:\n${s.points.map((p) => `- ${p}`).join('\n')}`,
+    s.decisions.length && `Decisions:\n${s.decisions.map((p) => `- ${p}`).join('\n')}`,
+    s.tasks.length && `Tasks:\n${s.tasks.map((t) => `- ${t.text}${t.owner ? ` (owner: ${t.owner})` : ''}${t.due ? ` (due: ${t.due})` : ''}`).join('\n')}`,
+    s.inferred.length && `Inferred:\n${s.inferred.map((p) => `- ${p}`).join('\n')}`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+// meta: metadata lines; chunks: from splitForSummary. onStep() is called after each LLM call.
+// Returns the final summary plus every task found in the pieces (the caller merges them).
+export async function summarizeChunks(meta, chunks, opts, onStep) {
+  if (chunks.length === 1) {
+    const s = await summarize(`${meta}\n\n${chunks[0]}`, opts)
+    onStep?.()
+    return { summary: s, partTasks: [] }
+  }
+  const parts = []
+  for (const [i, chunk] of chunks.entries()) {
+    parts.push(await summarize(`${meta}\nPart: ${i + 1} of ${chunks.length}\n\n${chunk}`, opts))
+    onStep?.()
+  }
+  const summary = await summarize(`${meta}\nMerged parts: ${parts.length}\n\n${parts.map(partToText).join('\n\n')}`, opts)
+  onStep?.()
+  return { summary, partTasks: parts.flatMap((p) => p.tasks) }
 }
 
 export async function ask(question, context, opts) {

@@ -72,6 +72,11 @@
       <button type="button" data-view="pending"><span data-icon="pending"></span>Pendientes</button>
     </nav>
 
+    <div id="progress" role="status" aria-live="polite" hidden>
+      <div class="progress-head"><span class="spinner"></span><span class="js-progress-label"></span><b class="js-progress-pct"></b></div>
+      <div class="progress-bar"><span class="js-progress-fill"></span></div>
+      <small class="js-progress-note"></small>
+    </div>
     <div id="toast" role="status" hidden></div>
 
     <dialog id="settings">

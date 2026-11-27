@@ -1,7 +1,7 @@
 import './style.css'
 import { notes, settings, requestPersistence } from './db.js'
 import { startRecording, SOURCES } from './recorder.js'
-import { transcribe, summarize, ask } from './ai.js'
+import { transcribe, summarizeChunks, splitForSummary, ask } from './ai.js'
 import { search } from './search.js'
 import { buildDigest } from './digest.js'
 import {
@@ -809,7 +809,7 @@ function togglePause() {
   if (session.paused) {
     session.resume()
     runningSince = Date.now()
-    setStatus(session.noteId ? 'Grabando (se añade a la nota)...' : 'Grabando...', { sticky: true })
+    setStatus(session.rec?.cont ? 'Grabando (se añade a la nota)...' : 'Grabando...', { sticky: true })
   } else {
     session.pause()
     elapsed += Date.now() - runningSince
@@ -835,39 +835,55 @@ document.querySelectorAll('.js-source').forEach((sel) => {
 async function toggleRecording(noteId = null) {
   if (session) return finishRecording()
   if (recordSource !== 'mic') setStatus('Elija "Toda la pantalla" y active "Compartir audio del sistema".', { sticky: true })
+  const target = typeof noteId === 'number' ? await notes.get(noteId) : null
+  // rec.cont: the first piece of this session gets a "[Continuación]" mark in the transcript.
+  const rec = { id: target?.id ?? null, cont: !!target?.audio, first: true }
   try {
-    session = await startRecording(recordSource)
+    session = await startRecording(recordSource, { onSegment: (blob) => saveSegment(rec, blob, { background: true }) })
   } catch (err) {
     const msg = err.name === 'NotAllowedError' ? 'Permiso denegado o se canceló el compartir.' : err.message
     return setStatus(`No se pudo grabar: ${msg}`)
   }
-  session.noteId = typeof noteId === 'number' ? noteId : null
+  // The note exists from the first second, so every 15-min piece is saved into it as it is recorded.
+  if (!rec.id) rec.id = await notes.add(blankNote({ type: 'meeting' }))
+  session.rec = rec
+  session.noteId = rec.id
   paintRecording(true)
-  setStatus(session.noteId ? 'Grabando (se añade a la nota)...' : 'Grabando...', { sticky: true })
+  setStatus(target ? 'Grabando (se añade a la nota)...' : 'Grabando... Se guarda solo cada 15 min.', { sticky: true })
   startTimer()
-  renderEditor()
+  await goToNote(await notes.get(rec.id))
+}
+
+async function saveSegment(rec, blob, { background = false } = {}) {
+  const cont = rec.first && rec.cont
+  rec.first = false
+  let n = await patchNote(rec.id, (x) => {
+    if (!x.audio) {
+      x.audio = blob
+      x.audioTranscribed = false
+    } else (x.audioParts ??= []).push({ blob, at: Date.now(), transcribed: false, cont })
+  })
+  // The note was deleted while recording: keep the audio in a new one.
+  if (!n) {
+    rec.id = await notes.add(blankNote({ audio: blob, type: 'meeting' }))
+    if (session?.rec === rec) session.noteId = rec.id
+  }
+  // While still recording, transcribe the finished pieces in the background: less to wait at the end.
+  if (background) transcribePending(rec.id).catch(() => {})
 }
 document.querySelectorAll('.js-record').forEach((b) => (b.onclick = () => toggleRecording()))
 
 async function finishRecording() {
   clearInterval(timerId)
-  const { noteId } = session
+  const { rec } = session
   const blob = await session.stop()
   session = null
   paintRecording(false)
 
   // Save the audio first: if the APIs fail we never lose the recording.
-  let id = noteId
-  if (id && (await notes.get(id))) {
-    await patchNote(id, (n) => {
-      if (!n.audio) n.audio = blob
-      else (n.audioParts ??= []).push({ blob, at: Date.now(), transcribed: false })
-    })
-  } else {
-    id = await notes.add(blankNote({ audio: blob, type: 'meeting' }))
-  }
-  await goToNote(await notes.get(id))
-  await processNote(id)
+  if (blob.size) await saveSegment(rec, blob)
+  await goToNote(await notes.get(rec.id))
+  await processNote(rec.id)
 }
 
 // A note created from the calendar lands on the selected day (to log things you forgot).
@@ -891,24 +907,89 @@ async function createNote({ body = '', day = state.view === 'calendar' ? state.s
 $('new-note-btn').onclick = () => createNote()
 
 // Typed or spoken, the AI step is the same: organize whatever text the note has.
+// ---------- progress panel ----------
+let lastPct = 0
+function showProgress(label, pct = null, note = '') {
+  const el = $('progress')
+  if (pct != null) lastPct = Math.max(0, Math.min(100, pct))
+  el.hidden = false
+  el.querySelector('.js-progress-label').textContent = label
+  el.querySelector('.js-progress-pct').textContent = `${Math.round(lastPct)}%`
+  el.querySelector('.js-progress-fill').style.width = `${lastPct}%`
+  if (note) el.querySelector('.js-progress-note').textContent = note
+}
+function hideProgress(delay = 0) {
+  setTimeout(() => {
+    if (!busy.size) $('progress').hidden = true
+  }, delay)
+}
+const mmss = (secs) => `${Math.floor(secs / 60)}:${pad(secs % 60)}`
+
+const busy = new Set() // notes being processed
+// Closing the window would cut a recording or a transcription in progress.
+window.addEventListener('beforeunload', (e) => {
+  if (session || busy.size) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+})
+
+// ---------- transcription (one piece at a time, in order) ----------
+// Legacy notes have no audioTranscribed flag: a transcript means the main audio was done.
+const audioDone = (n) => n.audioTranscribed ?? !!n.transcript
+const pendingPieces = (n) =>
+  [
+    n.audio && !audioDone(n) ? { key: 'main', blob: n.audio, cont: false } : null,
+    ...(n.audioParts ?? []).map((p, i) => (p.transcribed ? null : { key: i, blob: p.blob, cont: p.cont !== false })),
+  ].filter(Boolean)
+
+const jobs = new Map() // note id -> running transcription, so background and final runs never overlap
+const uiHooks = new Map() // note id -> { onPart, onWait } while the progress panel follows it
+
+function transcribePending(id) {
+  const run = (jobs.get(id) ?? Promise.resolve()).catch(() => {}).then(() => transcribeNow(id))
+  jobs.set(id, run)
+  return run
+}
+
+async function transcribeNow(id) {
+  const s = await loadSettings()
+  const note = await notes.get(id)
+  if (!note) return
+  const todo = pendingPieces(note)
+  for (const [k, piece] of todo.entries()) {
+    uiHooks.get(id)?.onPart(k, todo.length)
+    const text = (await transcribe(piece.blob, s.groqKey, { onWait: (secs) => uiHooks.get(id)?.onWait(secs) })).trim()
+    await patchNote(id, (n) => {
+      n.transcript = [n.transcript, text].filter((t) => t?.trim()).join(piece.cont ? '\n\n[Continuación]\n' : '\n\n')
+      if (piece.key === 'main') n.audioTranscribed = true
+      else n.audioParts[piece.key].transcribed = true
+    })
+  }
+}
+
+// Typed or spoken, the AI step is the same: organize whatever text the note has.
 async function processNote(id) {
   const s = await loadSettings()
+  busy.add(id)
+  setStatus('')
   try {
     let note = await notes.get(id)
-    if (!note.transcript && note.audio) {
-      setStatus('Transcribiendo...', { sticky: true })
-      const text = await transcribe(note.audio, s.groqKey)
-      note = await patchNote(id, (n) => (n.transcript = text))
-    }
-    // Segments added later are transcribed one by one and appended in order.
-    for (const [i, part] of (note.audioParts ?? []).entries()) {
-      if (part.transcribed) continue
-      setStatus('Transcribiendo la parte nueva...', { sticky: true })
-      const text = await transcribe(part.blob, s.groqKey)
-      note = await patchNote(id, (n) => {
-        n.transcript = [n.transcript, text].filter((t) => t?.trim()).join('\n\n[Continuación]\n')
-        n.audioParts[i].transcribed = true
+    const where = `Nota: ${noteTitle(note)}. Puede seguir usando la app.`
+    // Transcription takes the first 70% of the bar when there is audio left to transcribe.
+    const tShare = pendingPieces(note).length ? 70 : 0
+    if (tShare) {
+      showProgress('Preparando la transcripción...', 0, where)
+      uiHooks.set(id, {
+        onPart: (k, total) => showProgress(`Transcribiendo parte ${k + 1} de ${total}`, (tShare * k) / total),
+        onWait: (secs) =>
+          secs
+            ? showProgress(`Groq pide esperar ${mmss(secs)} (límite de audio por hora). Sigue solo.`)
+            : showProgress('Reintentando la transcripción...'),
       })
+      await transcribePending(id)
+      uiHooks.delete(id)
+      note = await notes.get(id)
     }
     const meta = [
       `Type: ${typeLabel(note.type)}`,
@@ -921,22 +1002,39 @@ async function processNote(id) {
       .join('\n\n')
     if (!source.trim()) throw new Error('Todavía no hay nada que organizar: escriba algo o grabe audio.')
 
-    setStatus('Organizando con IA...', { sticky: true })
-    const summary = await summarize(`${meta.join('\n')}\n\n${source}`, {
+    // Long transcripts are summarized piece by piece and then merged into one summary.
+    const chunks = splitForSummary(source)
+    const steps = chunks.length > 1 ? chunks.length + 1 : 1
+    let done = 0
+    const label = () =>
+      steps === 1 ? 'Organizando con IA...' : done < chunks.length ? `Resumiendo parte ${done + 1} de ${chunks.length}` : 'Uniendo el resumen final...'
+    showProgress(label(), tShare, `Nota: ${noteTitle(note)}. Puede seguir usando la app.`)
+    const { summary, partTasks } = await summarizeChunks(meta.join('\n'), chunks, {
       apiKey: s.llmKey,
       baseUrl: s.llmUrl,
       model: s.llmModel,
+    }, () => {
+      done++
+      showProgress(label(), tShare + ((100 - tShare) * done) / steps)
     })
     await patchNote(id, (n) => {
       // Never touches your text; tasks are merged so reprocessing does not duplicate them.
-      n.tasks = mergeTasks(n.tasks, summary.tasks)
+      n.tasks = mergeTasks(mergeTasks(n.tasks, partTasks), summary.tasks)
       n.summary = summary
       // The AI theme is only a suggestion: never overwrite one the user set.
       if (!n.category?.trim() && summary.category) n.category = summary.category
     })
+    busy.delete(id)
+    showProgress('Listo', 100)
+    hideProgress(1200)
     setStatus('Borrador listo: revíselo y confírmelo.')
   } catch (err) {
-    setStatus(err.message)
+    busy.delete(id)
+    hideProgress()
+    setStatus(`${err.message} El audio quedó guardado: pulse "Organizar con IA" para reintentar.`, { sticky: true })
+  } finally {
+    busy.delete(id)
+    uiHooks.delete(id)
   }
   await refresh()
 }

@@ -32,7 +32,12 @@ async function getPcAudio() {
   return stream
 }
 
-export async function startRecording(source = 'mic') {
+// 16 kbps Opus is enough for speech: ~7 MB per hour.
+const BITRATE = 16000
+export const SEGMENT_MS = 15 * 60 * 1000
+
+// onSegment(blob) is called every SEGMENT_MS with a finished piece of the recording.
+export async function startRecording(source = 'mic', { onSegment } = {}) {
   const streams = []
   try {
     if (source !== 'mic') streams.push(await getPcAudio())
@@ -48,26 +53,73 @@ export async function startRecording(source = 'mic') {
   for (const s of streams) ctx.createMediaStreamSource(new MediaStream(s.getAudioTracks())).connect(dest)
 
   const mimeType = pickMimeType()
-  // 32 kbps is plenty for speech and keeps 1h under ~15 MB (Groq free tier caps files at 25 MB).
-  const recorder = new MediaRecorder(dest.stream, { ...(mimeType && { mimeType }), audioBitsPerSecond: 32000 })
-  const chunks = []
-  recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data)
 
-  const done = new Promise((resolve) => {
-    recorder.onstop = () => {
-      streams.forEach((s) => s.getTracks().forEach((t) => t.stop()))
-      ctx.close()
-      resolve(new Blob(chunks, { type: recorder.mimeType }))
-    }
-  })
+  // Long recordings are cut into SEGMENT_MS pieces. Each piece is its own valid file, so it can be
+  // saved right away (a crash loses at most one piece) and stays far below Groq's 25 MB limit.
+  let recorder = null
+  let paused = false
+  let recordedMs = 0 // time recorded in the current piece, pauses excluded
+  let runningSince = 0
+  let finished = null
+  let lastRotation = Promise.resolve()
 
-  recorder.start(1000)
+  function newRecorder() {
+    const rec = new MediaRecorder(dest.stream, { ...(mimeType && { mimeType }), audioBitsPerSecond: BITRATE })
+    const chunks = []
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
+    rec.done = new Promise((resolve) => (rec.onstop = () => resolve(new Blob(chunks, { type: rec.mimeType }))))
+    rec.start(1000)
+    recordedMs = 0
+    runningSince = Date.now()
+    return rec
+  }
+
+  // Start the next piece before stopping the old one, so no audio falls in the gap.
+  function rotate() {
+    const old = recorder
+    recorder = newRecorder()
+    old.stop()
+    const prev = lastRotation
+    // Chained so pieces are always delivered in order, even if saving one is slow.
+    lastRotation = old.done.then(async (blob) => {
+      await prev.catch(() => {})
+      if (blob.size) await onSegment?.(blob)
+    })
+  }
+
+  const tick = setInterval(() => {
+    if (paused || finished) return
+    if (recordedMs + (Date.now() - runningSince) >= SEGMENT_MS) rotate()
+  }, 1000)
+
+  recorder = newRecorder()
   return {
-    stop: () => (recorder.state !== 'inactive' && recorder.stop(), done),
-    pause: () => recorder.state === 'recording' && recorder.pause(),
-    resume: () => recorder.state === 'paused' && recorder.resume(),
+    // Resolves with the last piece; the earlier ones already went to onSegment.
+    stop: () => {
+      if (finished) return finished
+      clearInterval(tick)
+      if (recorder.state !== 'inactive') recorder.stop()
+      finished = Promise.all([recorder.done, lastRotation.catch(() => {})]).then(([blob]) => {
+        streams.forEach((s) => s.getTracks().forEach((t) => t.stop()))
+        ctx.close()
+        return blob
+      })
+      return finished
+    },
+    pause: () => {
+      if (recorder.state !== 'recording') return
+      recorder.pause()
+      recordedMs += Date.now() - runningSince
+      paused = true
+    },
+    resume: () => {
+      if (recorder.state !== 'paused') return
+      recorder.resume()
+      runningSince = Date.now()
+      paused = false
+    },
     get paused() {
-      return recorder.state === 'paused'
+      return paused
     },
   }
 }

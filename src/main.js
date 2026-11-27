@@ -4,6 +4,7 @@ import { startRecording, SOURCES } from './recorder.js'
 import { transcribe, summarizeChunks, splitForSummary, ask } from './ai.js'
 import { search } from './search.js'
 import { buildDigest } from './digest.js'
+import { calendarEvents, eventKey, googleCalendarUrl, shareICS } from './calendar.js'
 import {
   pad, dayKey, keyToDate, TYPES, typeLabel, isStructured, when, pendingOf, firstLine,
   noteTitle, blankNote, mergeTasks, noteToText, LOCALE,
@@ -262,12 +263,104 @@ function noteRow(n, { day = null } = {}) {
 const noteList = (list, opts, emptyText) =>
   h('ul', { class: 'plain notes' }, list.length ? list.map((n) => noteRow(n, opts)) : [h('li', { class: 'empty' }, emptyText)])
 
+// ---------- phone calendar ----------
+const sentKeys = () => new Set(JSON.parse(localStorage.getItem('calSent') || '[]'))
+function markSent(events) {
+  const keys = sentKeys()
+  events.forEach((ev) => keys.add(eventKey(ev)))
+  localStorage.setItem('calSent', JSON.stringify([...keys].slice(-2000)))
+}
+const isSent = (ev) => sentKeys().has(eventKey(ev))
+const fmtEvent = (ev) => (ev.start ? `${fmtShort(ev.start)} · ${fmtTime(ev.start)}` : `${fmtShort(keyToDate(ev.day))} · todo el día`)
+
+async function sendToCalendar(events, filename) {
+  if (!events.length) return setStatus('No hay nada nuevo para enviar al calendario.')
+  const how = await shareICS(events, filename)
+  if (how === 'cancelled') return
+  markSent(events)
+  setStatus(
+    how === 'shared'
+      ? 'Elija su app de calendario para guardarlo.'
+      : `Se descargó ${filename}. Ábralo para añadir ${events.length === 1 ? 'el evento' : `los ${events.length} eventos`} a su calendario.`,
+  )
+  renderContent()
+}
+
+let calDialog = null
+function openCalendarDialog(ev) {
+  calDialog?.remove()
+  calDialog = h('dialog', { class: 'cal-dialog' },
+    h('h2', {}, 'Añadir al calendario'),
+    h('p', {}, h('strong', {}, ev.title)),
+    h('p', { class: 'hint' }, fmtEvent(ev)),
+    h('div', { class: 'cal-options' },
+      h('a', { class: 'button', href: googleCalendarUrl(ev), target: '_blank', rel: 'noopener', onclick: () => (markSent([ev]), calDialog.close(), renderContent()) },
+        'Google Calendar'),
+      h('button', { type: 'button', class: 'ghost', onclick: async () => (calDialog.close(), await sendToCalendar([ev], 'nota-ai-evento.ics')) },
+        'Otro calendario (Samsung, Apple, Outlook)'),
+    ),
+    h('p', { class: 'hint' }, 'El calendario le avisará aunque Nota AI esté cerrada. Si cambia la fecha, envíelo de nuevo: se actualiza, no se duplica.'),
+    h('div', { class: 'row end' }, h('button', { type: 'button', class: 'ghost', onclick: () => calDialog.close() }, 'Cerrar')),
+  )
+  document.body.append(calDialog)
+  calDialog.showModal()
+}
+
+// renderContent does not paint data-icon placeholders, so list views build icons directly.
+const ico = (name) => {
+  const el = h('span', { class: 'ico' })
+  el.innerHTML = svg(name)
+  return el
+}
+
+const calBtn = (ev) => {
+  const b = h('button', {
+    type: 'button',
+    class: `x cal-btn ${isSent(ev) ? 'sent' : ''}`,
+    title: isSent(ev) ? 'Ya enviado al calendario (enviar otra vez)' : 'Añadir al calendario del celular',
+    'aria-label': 'Añadir al calendario',
+    onclick: (e) => (e.stopPropagation(), openCalendarDialog(ev)),
+  })
+  b.innerHTML = svg('calendar')
+  return b
+}
+
+function calendarCard() {
+  const events = calendarEvents(state.notes).filter((ev) => (ev.start ?? keyToDate(ev.day).getTime() + 864e5) > Date.now())
+  const fresh = events.filter((ev) => !isSent(ev))
+  return card('Calendario del celular',
+    h('div', { class: 'cal-card' },
+      h('p', { class: 'hint' },
+        events.length
+          ? `Envíe sus recordatorios y pendientes con fecha al calendario de su teléfono. ${fresh.length ? `${fresh.length} sin enviar.` : 'Todo está enviado.'}`
+          : 'Ponga un recordatorio a una nota o una fecha a un pendiente y podrá enviarlo al calendario de su teléfono.'),
+      events.length
+        ? h('div', { class: 'row' },
+            h('button', { type: 'button', class: 'small', disabled: !fresh.length, onclick: () => sendToCalendar(fresh, 'nota-ai-nuevos.ics') },
+              ico('calendar'), `Enviar nuevos${fresh.length ? ` (${fresh.length})` : ''}`),
+            h('button', { type: 'button', class: 'ghost small', onclick: () => sendToCalendar(events, 'nota-ai-todo.ics') }, `Enviar todos (${events.length})`),
+          )
+        : null,
+      h('details', {},
+        h('summary', {}, '¿Cómo funciona?'),
+        h('ul', { class: 'cal-help' },
+          h('li', {}, 'En el celular se abre el menú Compartir: elija Calendario de Samsung o Google Calendar.'),
+          h('li', {}, 'En la computadora se descarga un archivo .ics: ábralo, o impórtelo en Google Calendar (Configuración → Importar) y se verá en su celular.'),
+          h('li', {}, 'Con el ícono de calendario de cada recordatorio o pendiente puede enviar uno solo, también directo a Google Calendar.'),
+          h('li', {}, 'Los recordatorios avisan a la hora exacta; los pendientes, a las 9:00 del día que vencen.'),
+        ),
+      ),
+    ),
+  )
+}
+
 function taskRow({ n, t, i }) {
   const today = todayKey()
   const meta = [n.title || noteTitle(n), t.owner, t.dueDate ? `vence ${fmtShort(keyToDate(t.dueDate))}` : null].filter(Boolean).join(' · ')
   return h('li', { class: `task ${!t.done && t.dueDate && t.dueDate < today ? 'overdue' : ''} ${t.done ? 'done' : ''}` },
     h('input', { type: 'checkbox', checked: t.done, 'aria-label': 'Marcar como hecho', onchange: (e) => toggleTask(n.id, i, e.target.checked) }),
-    h('button', { type: 'button', class: 'link', onclick: () => goToNote(n) }, h('span', {}, t.text), h('small', {}, meta)),
+    h('button', { type: 'button', class: 'link grow', onclick: () => goToNote(n) }, h('span', {}, t.text), h('small', {}, meta)),
+    !t.done && t.dueDate ? calBtn(calendarEvents([{ ...n, remindAt: null, tasks: [t] }])[0]) : null,
   )
 }
 
@@ -533,6 +626,7 @@ function pendingView() {
 
   return h('div', { class: 'view' },
     pageHead('Pendientes', 'Compromisos y recordatorios, los más próximos primero.'),
+    calendarCard(),
     reminders.length
       ? card('Recordatorios', h('ul', { class: 'plain' },
           reminders.map((n) =>
@@ -541,6 +635,7 @@ function pendingView() {
                 h('span', {}, noteTitle(n)),
                 h('small', {}, `${fmtShort(n.remindAt)} · ${fmtTime(n.remindAt)}`),
               ),
+              calBtn(calendarEvents([{ ...n, tasks: [] }])[0]),
               h('button', { type: 'button', class: 'x', 'aria-label': 'Quitar recordatorio', onclick: async () => { await setReminder(n.id, ''); await refresh() } }, '×'),
             ),
           ),
@@ -1303,8 +1398,12 @@ async function renderEditor() {
       h('button', { type: 'button', class: 'ghost small', onclick: () => fileInput.click() }, 'Adjuntar'),
       h('label', { class: 'remind' },
         h('span', {}, 'Recordarme'),
-        h('input', { type: 'datetime-local', value: n.remindAt ? toLocalInput(n.remindAt) : '', onchange: (e) => setReminder(n.id, e.target.value) }),
+        h('input', { type: 'datetime-local', value: n.remindAt ? toLocalInput(n.remindAt) : '', onchange: (e) => setReminder(n.id, e.target.value).then(renderEditor) }),
       ),
+      n.remindAt
+        ? h('button', { type: 'button', class: 'ghost small', title: 'Añadir este recordatorio al calendario del celular', onclick: () => openCalendarDialog(calendarEvents([{ ...n, tasks: [] }])[0]) },
+            h('span', { 'data-icon': 'calendar' }), 'Al calendario')
+        : null,
       h('button', { type: 'button', class: 'ghost small', onclick: (e) => copyText(noteToText(n), e.currentTarget) }, 'Copiar'),
       h('button', { type: 'button', class: 'ghost small', onclick: () => window.print() }, 'PDF'),
       h('button', { type: 'button', class: 'ghost small danger', onclick: () => removeNote(n.id) }, 'Eliminar'),

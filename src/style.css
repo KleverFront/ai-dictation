@@ -340,6 +340,16 @@ audio { width: 100%; height: 36px; }
 .tabbar { display: none; }
 
 /* ---------- dialog ---------- */
+.cal-options { display: grid; gap: 8px; margin: 14px 0 6px; }
+.cal-options a.button, .cal-options button { display: flex; justify-content: center; align-items: center; text-align: center; text-decoration: none; padding: 11px 14px; border-radius: 11px; font-weight: 600; }
+.cal-options a.button { background: var(--accent); color: #fff; }
+.cal-btn { display: inline-flex; align-items: center; padding: 4px 6px; }
+.cal-btn.sent { color: var(--accent); }
+.cal-card { display: grid; gap: 10px; }
+.cal-card .ico, button .ico { display: inline-flex; }
+.cal-help { margin: 8px 0 0 18px; display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.cal-card details summary { cursor: pointer; font-size: 13px; color: var(--accent); }
+
 .file-btn { font-size: 14px; }
 dialog { background: var(--surface); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius); width: min(92vw, 420px); padding: 20px; }
 dialog::backdrop { background: rgba(16, 23, 42, 0.45); backdrop-filter: blur(4px); }

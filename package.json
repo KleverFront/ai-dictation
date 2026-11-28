@@ -2,14 +2,22 @@
   "name": "ai-dictation",
   "private": true,
   "version": "0.1.0",
+  "license": "UNLICENSED",
+  "author": "Klever Ontaneda",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:cf": "npm run build:cf && wrangler dev",
+    "deploy:cf": "npm run build:cf && wrangler deploy",
+    "db:init": "wrangler d1 execute nota-ai --remote --file worker/schema.sql",
+    "db:init:local": "wrangler d1 execute nota-ai --local --file worker/schema.sql",
+    "build:cf": "rm -rf dist && BASE_PATH=/app/ vite build --outDir dist/app && cp -R site/. dist/"
   },
   "devDependencies": {
     "vite": "^6.0.0",
-    "vite-plugin-pwa": "^0.21.0"
+    "vite-plugin-pwa": "^0.21.0",
+    "wrangler": "^4.169.0"
   }
 }

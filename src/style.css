@@ -219,7 +219,7 @@ input[type='checkbox'] { accent-color: var(--accent); width: 17px; height: 17px;
 
 .task { display: flex; gap: 10px; align-items: center; padding: 7px 4px; border-radius: 9px; }
 .task:hover { background: var(--hover); }
-.task .link { display: grid; line-height: 1.35; }
+.task .link { display: grid; line-height: 1.35; justify-content: start; justify-items: start; text-align: left; }
 .task small { color: var(--muted); font-size: 12px; }
 .task.done .link span, .task.done .task-text { color: var(--muted); text-decoration: line-through; }
 .task.overdue small, .task.overdue .task-date, .overdue-text { color: var(--danger); }
@@ -307,6 +307,41 @@ audio { width: 100%; height: 36px; }
 .answer .overview { font-size: 15.5px; }
 
 /* ---------- toast + tabbar ---------- */
+/* ---------- sign-in + account ---------- */
+#gate { position: fixed; inset: 0; z-index: 101; display: grid; place-items: center; padding: 24px; background: var(--bg); }
+#gate[hidden] { display: none; }
+.gate-actions { display: grid; gap: 8px; width: 100%; margin-top: 6px; }
+a.button.ghost-link { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+#login { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: var(--bg); }
+#login[hidden] { display: none; }
+.login-card { width: min(100%, 400px); display: grid; justify-items: center; gap: 12px; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 32px 26px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.12); }
+.login-card .logo { width: 52px; height: 52px; border-radius: 16px; display: inline-flex; }
+.login-card h1 b { color: var(--accent); }
+.login-card .gsi { min-height: 44px; margin-top: 6px; }
+/* Google's button frame is light-themed: matching its color-scheme stops the browser from
+   painting an opaque white box behind it when the app is in dark mode. */
+.login-card .gsi, .login-card .gsi iframe { color-scheme: light; background: transparent; }
+.login-error { color: var(--danger); font-size: 13.5px; min-height: 1em; }
+.account-chip { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: transparent; border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; color: var(--fg); }
+.account-chip[hidden], .account-box[hidden] { display: none; }
+.account-chip img, .account-box img { width: 32px; height: 32px; border-radius: 50%; flex: none; object-fit: cover; }
+.account-chip .grow { display: grid; min-width: 0; }
+.account-chip strong { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.js-sync { font-size: 11.5px; color: var(--muted); }
+.js-sync[data-state='offline'], .js-sync[data-state='error'], .js-sync[data-state='auth'] { color: var(--danger); }
+.account-box { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; }
+.account-box .grow { display: grid; gap: 1px; min-width: 0; }
+.account-box small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.account-box .row { margin-top: 0; width: 100%; }
+.danger-zone { width: 100%; font-size: 13px; }
+.danger-zone summary { cursor: pointer; color: var(--muted); }
+.danger-btn { background: var(--danger); color: #fff; margin-top: 6px; }
+a.button { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; background: var(--accent); color: #fff; border-radius: 10px; padding: 8px 14px; font-weight: 600; font-size: 14px; }
+a.button.small { padding: 6px 12px; font-size: 13px; }
+.reminder-box .meta { margin-bottom: 8px; }
+a.button.join { background: var(--ok, #1ca78b); }
+.cal-auto { display: grid; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
 #progress {
   position: fixed; top: 16px; right: 16px; z-index: 45;
   width: min(92vw, 360px);

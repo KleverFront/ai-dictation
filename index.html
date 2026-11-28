@@ -7,16 +7,16 @@
     <meta name="description" content="Grabe reuniones, transcríbalas y resúmalas con IA." />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Nota AI" />
+    <meta name="apple-mobile-web-app-title" content="Quedamos" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <title>Nota AI</title>
+    <title>Quedamos</title>
   </head>
   <body>
     <div class="shell">
       <aside class="sidebar">
-        <div class="brand"><span class="logo" data-icon="sparkles"></span><span>Nota <b>AI</b></span></div>
+        <div class="brand"><span class="logo" data-icon="sparkles"></span><span>Quedamos</span></div>
 
         <button type="button" class="record js-record">
           <span class="dot"></span>
@@ -36,6 +36,10 @@
 
         <div class="side-foot">
           <button type="button" class="js-install" hidden><span data-icon="download"></span>Instalar app</button>
+          <button type="button" class="account-chip js-account js-settings" hidden>
+            <img class="js-avatar" alt="" referrerpolicy="no-referrer" />
+            <span class="grow"><strong class="js-account-name"></strong><small class="js-sync"></small></span>
+          </button>
           <button id="settings-btn" class="js-settings" type="button"><span data-icon="sliders"></span>Ajustes</button>
         </div>
       </aside>
@@ -72,6 +76,28 @@
       <button type="button" data-view="pending"><span data-icon="pending"></span>Pendientes</button>
     </nav>
 
+    <div id="gate" hidden>
+      <div class="login-card">
+        <span class="logo" data-icon="sparkles"></span>
+        <h1>Quedamos en la computadora</h1>
+        <p>En la computadora, Quedamos se usa con su <b>app de escritorio</b>: graba el audio de Zoom y Meet sin pedirle compartir la pantalla.</p>
+        <div class="gate-actions">
+          <a class="button" href="/#descargar">Descargar la app</a>
+          <a class="button ghost-link" href="/#probar">Probar 3 minutos en la web</a>
+        </div>
+        <p class="hint">¿Está en su celular? Abra esta misma dirección en Chrome y podrá usar la app completa.</p>
+      </div>
+    </div>
+    <div id="login" hidden>
+      <div class="login-card">
+        <span class="logo" data-icon="sparkles"></span>
+        <h1>Quedamos</h1>
+        <p>Grabe reuniones, transcríbalas y organícelas con IA.</p>
+        <p class="hint">Entre con su cuenta de Google. Sus notas, audios y claves quedan en su cuenta, separados de los de cualquier otro usuario, y los ve en todos sus dispositivos.</p>
+        <div class="js-gsi gsi"></div>
+        <p class="js-login-error login-error" role="alert"></p>
+      </div>
+    </div>
     <div id="progress" role="status" aria-live="polite" hidden>
       <div class="progress-head"><span class="spinner"></span><span class="js-progress-label"></span><b class="js-progress-pct"></b></div>
       <div class="progress-bar"><span class="js-progress-fill"></span></div>
@@ -82,11 +108,36 @@
     <dialog id="settings">
       <form method="dialog">
         <h2>Ajustes</h2>
+        <section id="account-box" class="account-box" hidden>
+          <img class="js-avatar" alt="" referrerpolicy="no-referrer" />
+          <div class="grow">
+            <strong class="js-account-name"></strong>
+            <small class="js-account-email"></small>
+            <small class="js-sync"></small>
+          </div>
+          <div class="row">
+            <button type="button" id="sync-now" class="ghost small">Sincronizar</button>
+            <button type="button" id="sign-out" class="ghost small danger">Cerrar sesión</button>
+          </div>
+          <details class="danger-zone">
+            <summary>Borrar mi cuenta</summary>
+            <p class="hint">Borra de la nube todas sus notas, audios y archivos, y su cuenta. No se puede deshacer. Exporte un respaldo antes si lo quiere conservar.</p>
+            <button type="button" id="delete-account" class="small danger-btn">Borrar mi cuenta y mis datos</button>
+          </details>
+        </section>
         <label>Clave de API de Groq <input id="groq-key" type="password" autocomplete="off" /></label>
         <label>Clave de API del LLM <input id="llm-key" type="password" autocomplete="off" /></label>
         <label>URL base del LLM <input id="llm-url" placeholder="https://api.deepseek.com" /></label>
         <label>Modelo del LLM <input id="llm-model" placeholder="deepseek-chat" /></label>
-        <p class="hint">Las claves se guardan solo en este navegador (IndexedDB).</p>
+        <label>Idioma de las grabaciones
+          <select id="stt-lang">
+            <option value="es">Español</option>
+            <option value="en">English</option>
+            <option value="pt">Português</option>
+            <option value="auto">Detectar automáticamente</option>
+          </select>
+        </label>
+        <p class="hint js-keys-hint">Las claves se guardan solo en este navegador (IndexedDB).</p>
         <div class="row">
           <button type="button" class="ghost js-install" hidden><span data-icon="download"></span>Instalar app</button>
         </div>

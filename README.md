@@ -1,4 +1,4 @@
-# Nota AI (ai-dictation)
+# Quedamos (ai-dictation)
 
 Personal notes app: record a meeting, transcribe it (Groq Whisper) and organize it with an
 OpenAI-compatible LLM (DeepSeek by default). Notes, calendar, pending items, reminders and
@@ -57,3 +57,8 @@ Notes and keys are per device and per origin: the phone and the PC do not share 
 - `src/ai.js` transcription, structured summary, questions over your notes
 - `src/notes.js` shared pure helpers; `src/search.js` search; `src/digest.js` day/week recap (no AI)
 - `src/db.js` IndexedDB wrapper; `src/recorder.js` MediaRecorder wrapper
+
+## License
+
+Proprietary. Copyright (c) 2026 Klever Ontaneda. All rights reserved.
+The code is public for viewing only; copying, modifying, redistributing or hosting it requires written permission. See [LICENSE](LICENSE).

@@ -1,0 +1,947 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quedamos — Prototipo de interfaz</title>
+<style>
+@font-face { font-family: 'Satoshi'; src: url('fonts/satoshi-400.woff2') format('woff2'); font-weight: 400; }
+@font-face { font-family: 'Satoshi'; src: url('fonts/satoshi-500.woff2') format('woff2'); font-weight: 500; }
+@font-face { font-family: 'Satoshi'; src: url('fonts/satoshi-700.woff2') format('woff2'); font-weight: 700; }
+@font-face { font-family: 'Satoshi'; src: url('fonts/satoshi-900.woff2') format('woff2'); font-weight: 900; }
+
+/* ================= tokens ================= */
+:root, [data-theme='light'] {
+  --page: #dfe2ea; --bg: #f6f7fb; --surface: #ffffff; --raised: #ffffff; --fg: #141a2e; --muted: #667089; --faint: #98a1b5;
+  --border: #e5e8f0; --hover: #f1f2f8; --press: #e7e9f2;
+  --accent: #5b4ce0; --accent-hover: #4d3fd0; --accent-soft: #efedff; --on-accent: #fff;
+  --ink-btn: #141a2e; --ink-btn-hover: #262e48; --on-ink: #fff;
+  --danger: #d4405a; --danger-soft: #fdecef; --ok: #138a6c; --ok-soft: #e3f5ee; --warn: #b8730c; --warn-soft: #fdf3e2;
+  --rec: #ff4d67; --shadow: 0 1px 2px rgba(20,26,46,.05), 0 10px 30px -14px rgba(20,26,46,.25); --shimmer: rgba(255,255,255,.7);
+  color-scheme: light;
+}
+[data-theme='dark'] {
+  --page: #07080d; --bg: #0e1018; --surface: #151824; --raised: #1b1f2e; --fg: #eceef6; --muted: #9aa2b8; --faint: #6c7489;
+  --border: #252a3a; --hover: #1e2232; --press: #262b3d;
+  --accent: #8f82ff; --accent-hover: #a297ff; --accent-soft: rgba(143,130,255,.16); --on-accent: #0e1018;
+  --ink-btn: #eceef6; --ink-btn-hover: #ffffff; --on-ink: #0e1018;
+  --danger: #ff7088; --danger-soft: rgba(255,112,136,.14); --ok: #3fd1a6; --ok-soft: rgba(63,209,166,.14); --warn: #f0b558; --warn-soft: rgba(240,181,88,.14);
+  --rec: #ff5a72; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 14px 34px -14px rgba(0,0,0,.7); --shimmer: rgba(255,255,255,.06);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+body { font-family: 'Satoshi', ui-sans-serif, system-ui, sans-serif; background: var(--page); color: var(--fg); font-size: 14.5px; line-height: 1.5; -webkit-font-smoothing: antialiased; transition: background .25s; }
+button { font: inherit; color: inherit; }
+.ico { width: 18px; height: 18px; display: inline-block; flex: none; }
+.muted { color: var(--muted); }
+
+/* ================= review toolbar (not part of the app) ================= */
+.review { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 24px; background: #10131d; color: #fff; }
+.review b { font-weight: 900; letter-spacing: -.02em; margin-right: 10px; }
+.review .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.review .tabs a { color: #b7bdd0; text-decoration: none; font-weight: 700; font-size: 13px; padding: 6px 11px; border-radius: 8px; }
+.review .tabs a:hover { background: #1f2434; color: #fff; }
+.review .tabs a.on { background: #fff; color: #10131d; }
+.review .theme { margin-left: auto; display: flex; background: #1f2434; border-radius: 999px; padding: 3px; }
+.review .theme button { border: 0; background: none; color: #b7bdd0; font-weight: 700; font-size: 13px; padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.review .theme button.on { background: #fff; color: #10131d; }
+.stage { padding: 28px 24px 60px; display: grid; gap: 18px; justify-content: center; }
+.note-tag { color: #6a7287; font-size: 13px; font-weight: 700; }
+[data-theme='dark'] .note-tag { color: #8a92a8; }
+
+/* ================= atoms ================= */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid transparent; font-weight: 700; font-size: 14px; background: var(--ink-btn); color: var(--on-ink); cursor: pointer; white-space: nowrap; transition: background .15s, border-color .15s, transform .08s, box-shadow .15s; }
+.btn:hover, .btn.is-hover { background: var(--ink-btn-hover); }
+.btn:active, .btn.is-press { transform: scale(.97); }
+.btn:focus-visible, .btn.is-focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.accent { background: var(--accent); color: var(--on-accent); }
+.btn.accent:hover, .btn.accent.is-hover { background: var(--accent-hover); box-shadow: 0 6px 16px -8px var(--accent); }
+.btn.ghost { background: transparent; color: var(--fg); border-color: var(--border); }
+.btn.ghost:hover, .btn.ghost.is-hover { background: var(--hover); border-color: var(--press); }
+.btn.quiet { background: transparent; color: var(--muted); }
+.btn.quiet:hover, .btn.quiet.is-hover { background: var(--hover); color: var(--fg); }
+.btn.icon { width: 36px; padding: 0; }
+.btn.sm { height: 30px; font-size: 13px; padding: 0 10px; border-radius: 8px; }
+.btn[disabled], .btn.is-disabled { opacity: .45; pointer-events: none; }
+.btn.loading { pointer-events: none; }
+.btn.loading .spin { width: 14px; height: 14px; border-width: 2px; border-color: color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; }
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 700; background: var(--hover); color: var(--muted); white-space: nowrap; }
+.chip.theme { background: var(--accent-soft); color: var(--accent); }
+.chip.due { background: var(--danger-soft); color: var(--danger); }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.h-sec { font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+.box { width: 17px; height: 17px; border: 1.8px solid var(--faint); border-radius: 5px; flex: none; cursor: pointer; transition: border-color .15s, background .15s; display: grid; place-items: center; }
+.box:hover { border-color: var(--accent); background: var(--accent-soft); }
+.box.done { background: var(--ok); border-color: var(--ok); }
+.box.done::after { content: ''; width: 8px; height: 4px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translate(1px,-1px); }
+.star { color: #e9a400; }
+.ava { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg,#c9c3ff,#8fd3c0); flex: none; }
+.spin { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid var(--accent-soft); border-top-color: var(--accent); animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.dot-rec { width: 10px; height: 10px; border-radius: 50%; background: var(--rec); flex: none; }
+.pulse { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--rec) 60%, transparent); } 50% { box-shadow: 0 0 0 7px transparent; } }
+.skel { background: var(--hover); border-radius: 7px; position: relative; overflow: hidden; }
+.skel::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, var(--shimmer), transparent); animation: shimmer 1.3s infinite; }
+@keyframes shimmer { to { transform: translateX(100%); } }
+
+/* ================= app frame (desktop) ================= */
+.desk { width: 1320px; height: 860px; display: grid; grid-template-columns: 232px 1fr; background: var(--bg); border-radius: 14px; overflow: hidden; box-shadow: 0 24px 60px -24px rgba(0,0,0,.45); position: relative; }
+.side { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 14px; display: flex; flex-direction: column; gap: 4px; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 900; font-size: 18px; letter-spacing: -.03em; padding: 0 8px 16px; }
+.logo { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; color: var(--on-accent); }
+.rec-big { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border-radius: 12px; background: var(--ink-btn); color: var(--on-ink); font-weight: 700; margin-bottom: 14px; cursor: pointer; transition: background .15s, transform .08s; }
+.rec-big:hover { background: var(--ink-btn-hover); }
+.rec-big:active { transform: scale(.98); }
+.rec-big .caret { margin-left: auto; opacity: .6; font-size: 12px; }
+.nav a { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border-radius: 9px; color: var(--muted); font-weight: 700; text-decoration: none; cursor: pointer; transition: background .15s, color .15s; }
+.nav a:hover { background: var(--hover); color: var(--fg); }
+.nav a.on { background: var(--hover); color: var(--fg); }
+.nav a .count { margin-left: auto; font-size: 12px; color: var(--danger); }
+.side .foot { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: background .15s; }
+.side .foot:hover { background: var(--hover); }
+.side .foot small { display: flex; align-items: center; gap: 5px; color: var(--ok); font-size: 11.5px; font-weight: 500; }
+.side .foot small i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.content { overflow: hidden; padding: 28px 36px; position: relative; }
+.page-h { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.page-h h1 { font-weight: 900; font-size: 30px; letter-spacing: -.035em; line-height: 1.1; }
+.page-h p { color: var(--muted); margin-top: 3px; }
+.search { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); color: var(--faint); transition: border-color .15s, box-shadow .15s; }
+.search:hover { border-color: var(--press); }
+.search.is-focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); color: var(--fg); }
+.search kbd { margin-left: auto; font: inherit; font-size: 11.5px; border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; }
+.card { background: var(--surface); border-radius: 16px; padding: 16px 18px; border: 1px solid var(--border); }
+.grid2 { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
+.row { display: flex; align-items: center; gap: 10px; padding: 10px 8px; margin: 0 -8px; border-radius: 10px; transition: background .15s; }
+.row:hover { background: var(--hover); }
+.row .grow { flex: 1; min-width: 0; }
+.row .grow b { display: block; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .grow small { color: var(--muted); font-size: 12.5px; }
+.row .hover-act { opacity: 0; transition: opacity .15s; }
+.row:hover .hover-act, .row.is-hover .hover-act { opacity: 1; }
+.row.is-hover { background: var(--hover); }
+.next { display: flex; gap: 16px; align-items: center; }
+.next .when { text-align: center; padding-right: 16px; border-right: 1px solid var(--border); }
+.next .when b { display: block; font-size: 26px; font-weight: 900; letter-spacing: -.04em; line-height: 1; }
+.next .when small { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+.next .what { flex: 1; min-width: 0; }
+.next .what b { display: block; font-size: 16px; }
+.next .what small { color: var(--muted); }
+.quick { display: flex; align-items: center; gap: 10px; }
+.quick input { flex: 1; height: 40px; border: 0; background: transparent; font: inherit; color: var(--fg); outline: 0; }
+.quick input::placeholder { color: var(--faint); }
+
+/* list + editor */
+.two { display: grid; grid-template-columns: 390px 1fr; height: 100%; margin: -28px -36px; }
+.list { border-right: 1px solid var(--border); padding: 18px 16px; overflow: hidden; }
+.filters { display: flex; gap: 6px; margin: 14px 0; overflow: hidden; }
+.f { height: 28px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); font-size: 13px; font-weight: 700; color: var(--muted); display: inline-flex; align-items: center; white-space: nowrap; cursor: pointer; transition: all .15s; }
+.f:hover { border-color: var(--press); color: var(--fg); }
+.f.on { background: var(--ink-btn); color: var(--on-ink); border-color: var(--ink-btn); }
+.nrow { padding: 11px 12px; border-radius: 11px; display: grid; gap: 3px; margin-bottom: 2px; cursor: pointer; transition: background .15s, box-shadow .15s; }
+.nrow:hover { background: var(--hover); }
+.nrow.on { background: var(--surface); box-shadow: 0 0 0 1px var(--border), 0 6px 16px -10px rgba(0,0,0,.3); }
+.nrow .t { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+.nrow .t time { margin-left: auto; font-size: 12px; color: var(--faint); font-weight: 500; }
+.nrow p { color: var(--muted); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nrow .tags { display: flex; gap: 5px; margin-top: 3px; }
+.editor { padding: 26px 40px; overflow: hidden; background: var(--surface); position: relative; }
+.ed-top { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+.ed-top .crumb { color: var(--faint); font-size: 13px; }
+.ed-top .sp { flex: 1; }
+.ed-title { font-weight: 900; font-size: 30px; letter-spacing: -.035em; line-height: 1.1; display: flex; gap: 10px; }
+.ed-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 10px 0 16px; color: var(--muted); font-size: 13.5px; }
+.ed-meta b { color: var(--fg); }
+.ed-meta .sep { color: var(--border); }
+.remind { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 14px; border-radius: 12px; background: var(--hover); margin-bottom: 22px; }
+.remind .bell { color: var(--accent); }
+.remind .txt b { font-weight: 700; }
+.remind .txt small { display: block; color: var(--muted); font-size: 12.5px; }
+.remind .sp { flex: 1; }
+.cal-added { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ok); padding: 0 8px; }
+.draft { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--warn); font-weight: 700; margin-bottom: 8px; }
+.draft .btn { margin-left: auto; }
+.overview { font-size: 16px; line-height: 1.6; margin-bottom: 22px; max-width: 62ch; }
+.cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 32px; }
+.task { display: flex; align-items: center; gap: 10px; padding: 9px 6px; margin: 0 -6px; border-bottom: 1px solid var(--border); border-radius: 6px; transition: background .15s; }
+.task:hover { background: var(--hover); }
+.task .who { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.task .cal-quick { opacity: 0; transition: opacity .15s; }
+.task:hover .cal-quick, .task.is-hover .cal-quick { opacity: 1; }
+.task.is-hover { background: var(--hover); }
+.task.done span.tx { color: var(--faint); text-decoration: line-through; }
+.task.add { color: var(--faint); border-bottom: 0; cursor: text; }
+ul.pts { list-style: none; display: grid; gap: 8px; }
+ul.pts li { padding-left: 14px; position: relative; }
+ul.pts li::before { content: ''; position: absolute; left: 0; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.menu { position: absolute; width: 230px; background: var(--raised); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; z-index: 5; animation: pop .14s ease-out; }
+@keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+.menu div { padding: 8px 10px; border-radius: 8px; display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.menu div:hover, .menu .hl { background: var(--hover); }
+.menu .danger { color: var(--danger); }
+.menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+.menu kbd { margin-left: auto; font: inherit; font-size: 11.5px; color: var(--faint); }
+
+/* recording + processing overlays (desktop) */
+.recbar { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 18px; border-radius: 16px; background: var(--ink-btn); color: var(--on-ink); box-shadow: 0 18px 40px -14px rgba(0,0,0,.5); }
+.recbar .time { font-weight: 900; font-variant-numeric: tabular-nums; font-size: 18px; letter-spacing: -.02em; }
+.wave { display: flex; align-items: center; gap: 3px; height: 26px; }
+.wave i { width: 3px; border-radius: 3px; background: currentColor; opacity: .85; animation: wave 1s ease-in-out infinite; }
+@keyframes wave { 0%,100% { height: 4px; } 50% { height: 24px; } }
+.recbar .src { font-size: 12.5px; opacity: .7; }
+.recbar .btn { background: color-mix(in srgb, var(--on-ink) 12%, transparent); color: var(--on-ink); }
+.recbar .btn.stop { background: var(--rec); color: #fff; }
+.progress { position: absolute; top: 18px; right: 18px; width: 340px; padding: 14px 16px; border-radius: 14px; background: var(--raised); border: 1px solid var(--border); box-shadow: var(--shadow); display: grid; gap: 10px; animation: pop .2s ease-out; }
+.progress .head { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.progress .head b { margin-left: auto; color: var(--accent); font-variant-numeric: tabular-nums; }
+.bar { height: 7px; border-radius: 99px; background: var(--accent-soft); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .4s ease; position: relative; overflow: hidden; }
+.bar span::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent); animation: shimmer 1.4s infinite; transform: translateX(-100%); }
+.steps { list-style: none; display: grid; gap: 5px; font-size: 13px; }
+.steps li { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.steps li.done { color: var(--fg); }
+.steps li.done::before { content: '✓'; color: var(--ok); font-weight: 900; width: 16px; text-align: center; }
+.steps li.now::before { content: ''; width: 12px; height: 12px; margin: 0 2px; border-radius: 50%; border: 2px solid var(--accent-soft); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+.steps li.todo::before { content: '○'; color: var(--faint); width: 16px; text-align: center; }
+.toast { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-radius: 12px; background: var(--ink-btn); color: var(--on-ink); font-weight: 500; box-shadow: var(--shadow); white-space: nowrap; }
+.toast .ok { color: var(--ok); }
+[data-theme='dark'] .toast .ok { color: #138a6c; }
+
+/* pendientes */
+.banner { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 14px; background: var(--accent-soft); margin-bottom: 18px; }
+.banner b { color: var(--accent); }
+.banner .btn { margin-left: auto; }
+.group-h { display: flex; justify-content: space-between; align-items: baseline; margin: 18px 0 6px; }
+.group-h b { font-size: 15px; }
+.group-h b.red { color: var(--danger); }
+
+/* calendar */
+.cal-wrap { display: grid; grid-template-columns: 1fr 340px; gap: 18px; height: calc(100% - 70px); }
+.month { display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: auto repeat(6, 1fr); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--surface); }
+.month .dow { padding: 8px 10px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); border-bottom: 1px solid var(--border); }
+.day { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 6px 7px; display: grid; align-content: start; gap: 3px; cursor: pointer; transition: background .15s; min-height: 0; overflow: hidden; }
+.day:nth-child(7n) { border-right: 0; }
+.day:hover { background: var(--hover); }
+.day .n { font-size: 12.5px; font-weight: 700; color: var(--muted); width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; }
+.day.out .n { color: var(--faint); opacity: .5; }
+.day.today .n { background: var(--accent); color: var(--on-accent); }
+.day.sel { background: var(--accent-soft); }
+.ev { font-size: 11.5px; font-weight: 700; padding: 1px 6px; border-radius: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev.meet { background: var(--accent-soft); color: var(--accent); }
+.ev.task { background: var(--hover); color: var(--muted); }
+.ev.due { background: var(--danger-soft); color: var(--danger); }
+.agenda { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; overflow: hidden; }
+.agenda h3 { font-weight: 900; font-size: 19px; letter-spacing: -.02em; }
+.tl { margin-top: 14px; display: grid; gap: 0; }
+.tl .slot { display: grid; grid-template-columns: 46px 1fr; gap: 10px; min-height: 40px; }
+.tl .slot time { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; padding-top: 2px; }
+.tl .slot .line { border-top: 1px solid var(--border); padding-top: 6px; }
+.tl .blk { padding: 8px 10px; border-radius: 10px; background: var(--accent-soft); border-left: 3px solid var(--accent); }
+.tl .blk b { display: block; font-size: 13.5px; }
+.tl .blk small { color: var(--muted); font-size: 12px; }
+.tl .now { position: relative; }
+.tl .now::before { content: ''; position: absolute; left: -6px; right: 0; top: -1px; height: 2px; background: var(--rec); }
+.tl .now::after { content: ''; position: absolute; left: -9px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--rec); }
+
+/* login */
+.login { display: grid; place-items: center; height: 100%; background: var(--bg); grid-column: 1 / -1; }
+.login-card { width: 420px; display: grid; justify-items: center; gap: 12px; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 36px 34px 28px; box-shadow: var(--shadow); }
+.login-card .logo { width: 54px; height: 54px; border-radius: 16px; }
+.login-card h2 { font-weight: 900; font-size: 26px; letter-spacing: -.03em; }
+.login-card p { color: var(--muted); }
+.gbtn { display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 18px 0 6px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--fg); font-weight: 700; cursor: pointer; transition: background .15s, box-shadow .15s; margin-top: 8px; }
+.gbtn:hover, .gbtn.is-hover { background: var(--hover); box-shadow: 0 4px 14px -8px rgba(0,0,0,.4); }
+.gbtn .g { width: 34px; height: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; }
+.code { display: flex; gap: 8px; margin: 6px 0; }
+.code span { width: 46px; height: 56px; border-radius: 12px; background: var(--hover); display: grid; place-items: center; font-weight: 900; font-size: 26px; letter-spacing: -.02em; }
+.fine { font-size: 12.5px; color: var(--faint); }
+.dots { display: inline-flex; gap: 4px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: bounce 1.2s infinite; }
+.dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes bounce { 0%,80%,100% { transform: translateY(0); opacity: .4; } 40% { transform: translateY(-5px); opacity: 1; } }
+
+/* states board */
+.board { width: 1320px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.board .card { display: grid; gap: 12px; align-content: start; background: var(--surface); }
+.board .card > p:first-child { font-weight: 900; letter-spacing: -.02em; font-size: 16px; }
+.state-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.state-row small { width: 100%; color: var(--faint); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.sync { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--hover); }
+.sync.ok { color: var(--ok); } .sync.off { color: var(--warn); } .sync.err { color: var(--danger); }
+.sync i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 18px 10px; color: var(--muted); }
+.empty .big { width: 52px; height: 52px; border-radius: 16px; background: var(--hover); display: grid; place-items: center; color: var(--faint); }
+.empty b { color: var(--fg); font-size: 15px; }
+
+/* ================= phone ================= */
+.phones { display: flex; gap: 30px; flex-wrap: wrap; justify-content: center; }
+.pw { display: grid; gap: 10px; justify-items: center; }
+.phone { width: 390px; height: 844px; border-radius: 46px; background: var(--bg); position: relative; overflow: hidden; box-shadow: 0 0 0 10px #10131d, 0 30px 60px -20px rgba(0,0,0,.5); }
+.status { height: 46px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; font-size: 13.5px; font-weight: 700; }
+.p-top { display: flex; align-items: center; gap: 10px; padding: 4px 18px 10px; }
+.p-top .search { flex: 1; height: 42px; }
+.p-body { padding: 4px 18px 120px; }
+.p-h1 { font-weight: 900; font-size: 26px; letter-spacing: -.035em; line-height: 1.1; }
+.p-date { color: var(--muted); margin: 3px 0 16px; }
+.phone .card { margin-bottom: 12px; padding: 14px 16px; }
+.tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 86px; background: var(--surface); border-top: 1px solid var(--border); display: grid; grid-template-columns: repeat(5, 1fr); padding-top: 10px; }
+.tabbar div { display: grid; justify-items: center; align-content: start; gap: 3px; font-size: 11px; font-weight: 700; color: var(--faint); }
+.tabbar div.on { color: var(--fg); }
+.fab { width: 58px; height: 58px; border-radius: 50%; background: var(--ink-btn); display: grid; place-items: center; margin-top: -28px; box-shadow: 0 10px 24px -8px rgba(0,0,0,.6); }
+.fab span { width: 18px; height: 18px; border-radius: 50%; background: var(--rec); }
+.p-note-top { display: flex; align-items: center; gap: 4px; padding: 4px 10px 4px 6px; }
+.p-note-top .sp { flex: 1; }
+.p-actions { display: flex; gap: 8px; margin: 14px 0 16px; }
+.p-actions .btn { flex: 1; height: 44px; }
+.sheet-dim { position: absolute; inset: 0; background: rgba(5,7,14,.5); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-radius: 26px 26px 0 0; padding: 10px 18px 34px; }
+.grab { width: 40px; height: 5px; border-radius: 9px; background: var(--border); margin: 0 auto 16px; }
+.opt { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 14px; border: 1.5px solid var(--border); margin-bottom: 10px; }
+.opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.opt .oi { width: 40px; height: 40px; border-radius: 12px; background: var(--hover); display: grid; place-items: center; flex: none; }
+.opt.on .oi { background: var(--surface); color: var(--accent); }
+.opt small { display: block; color: var(--muted); font-size: 12.5px; }
+.opt .radio { margin-left: auto; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); flex: none; }
+.opt.on .radio { border: 6px solid var(--accent); }
+.p-rec { position: absolute; left: 12px; right: 12px; bottom: 98px; display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 18px; background: var(--ink-btn); color: var(--on-ink); }
+.p-rec .time { font-weight: 900; font-size: 18px; font-variant-numeric: tabular-nums; }
+.p-rec .btn { background: color-mix(in srgb, var(--on-ink) 12%, transparent); color: var(--on-ink); }
+.p-rec .btn.stop { background: var(--rec); color: #fff; }
+
+/* ================= PDF ================= */
+.pdf-page { width: 794px; min-height: 1123px; background: #fff; color: #141a2e; padding: 64px 72px; box-shadow: 0 24px 60px -24px rgba(0,0,0,.45); font-size: 12.5pt; line-height: 1.55; }
+.pdf-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 2px solid #141a2e; margin-bottom: 26px; }
+.pdf-head .b { display: flex; align-items: center; gap: 8px; font-weight: 900; letter-spacing: -.02em; }
+.pdf-head .b span { width: 22px; height: 22px; border-radius: 6px; background: #5b4ce0; }
+.pdf-head small { color: #667089; font-size: 9.5pt; }
+.pdf-page h1 { font-weight: 900; font-size: 25pt; letter-spacing: -.03em; line-height: 1.1; }
+.pdf-meta { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 4px 28px; margin: 14px 0 22px; font-size: 10pt; }
+.pdf-meta dt { color: #667089; font-size: 8.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.pdf-meta dd { font-weight: 700; }
+.pdf-page h2 { font-size: 9.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #5b4ce0; margin: 22px 0 8px; }
+.pdf-page .lead { font-size: 13pt; }
+.pdf-page ul { padding-left: 18px; display: grid; gap: 4px; }
+.pdf-tbl { width: 100%; border-collapse: collapse; font-size: 11pt; }
+.pdf-tbl th { text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .06em; color: #667089; padding: 6px 8px; border-bottom: 1px solid #d9dde8; }
+.pdf-tbl td { padding: 8px; border-bottom: 1px solid #eceef4; vertical-align: top; }
+.pdf-tbl .cb { width: 12px; height: 12px; border: 1.5px solid #98a1b5; border-radius: 3px; display: inline-block; }
+.pdf-inferred { background: #f6f7fb; border-radius: 8px; padding: 10px 14px; font-size: 10.5pt; color: #4a5370; }
+.pdf-transcript { font-size: 10pt; color: #3a4257; column-count: 2; column-gap: 28px; }
+.pdf-transcript p { margin-bottom: 6px; }
+.pdf-transcript b { color: #141a2e; }
+.pdf-foot { display: flex; justify-content: space-between; margin-top: 30px; padding-top: 10px; border-top: 1px solid #e5e8f0; font-size: 8.5pt; color: #98a1b5; }
+
+
+/* perfil */
+.side .foot.on { background: var(--hover); border-color: var(--press); }
+.prof { display: grid; grid-template-columns: 210px 1fr; gap: 28px; }
+.prof-nav { display: grid; align-content: start; gap: 2px; }
+.prof-nav a { padding: 8px 12px; border-radius: 9px; font-weight: 700; color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
+.prof-nav a:hover { background: var(--hover); color: var(--fg); }
+.prof-nav a.on { background: var(--accent-soft); color: var(--accent); }
+.prof-main { overflow: hidden; display: grid; gap: 14px; align-content: start; max-width: 760px; }
+.who { display: flex; align-items: center; gap: 16px; }
+.who .ava { width: 56px; height: 56px; }
+.who b { font-size: 19px; font-weight: 900; letter-spacing: -.02em; display: block; }
+.set { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.set:last-child { border-bottom: 0; }
+.set .grow { flex: 1; min-width: 0; }
+.set .grow b { display: block; font-weight: 700; }
+.set .grow small { color: var(--muted); font-size: 13px; }
+.sel { height: 34px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface); display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
+.sel:hover { border-color: var(--press); }
+.toggle { width: 40px; height: 24px; border-radius: 99px; background: var(--press); position: relative; cursor: pointer; transition: background .2s; flex: none; }
+.toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s; }
+.toggle.on { background: var(--accent); }
+.toggle.on::after { transform: translateX(16px); }
+.seg { display: inline-flex; background: var(--hover); border-radius: 10px; padding: 3px; }
+.seg span { padding: 5px 12px; border-radius: 8px; font-weight: 700; font-size: 13px; color: var(--muted); cursor: pointer; }
+.seg span.on { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.meter { height: 8px; border-radius: 99px; background: var(--hover); overflow: hidden; display: flex; }
+.meter i { display: block; height: 100%; }
+.key { font-family: ui-monospace, monospace; font-size: 13px; color: var(--muted); }
+.danger-zone { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
+/* actualización */
+.upd-bar { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: 14px; background: var(--ink-btn); color: var(--on-ink); box-shadow: var(--shadow); }
+.upd-bar .btn { background: color-mix(in srgb, var(--on-ink) 12%, transparent); color: var(--on-ink); }
+.upd-bar .btn.go { background: var(--accent); color: var(--on-accent); }
+.upd-badge { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.modal-dim { position: absolute; inset: 0; background: rgba(5,7,14,.45); display: grid; place-items: center; animation: fade .2s; }
+@keyframes fade { from { opacity: 0; } }
+.modal { width: 460px; background: var(--raised); border: 1px solid var(--border); border-radius: 20px; padding: 24px; box-shadow: var(--shadow); display: grid; gap: 14px; animation: pop .2s ease-out; }
+.modal h3 { font-weight: 900; font-size: 21px; letter-spacing: -.02em; }
+.modal ul { list-style: none; display: grid; gap: 7px; }
+.modal li { display: flex; gap: 9px; }
+.modal li::before { content: '✦'; color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) { *, *::after, *::before { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-notes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4h14v16H5zM9 9h6M9 13h6M9 17h3"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+    <symbol id="i-calplus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4M12 13v5M9.5 15.5h5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+    <symbol id="i-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24" fill="currentColor"><path d="m12 2.8 2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></symbol>
+    <symbol id="i-fwd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+    <symbol id="i-cloudoff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.5 4.5 0 0 0 7 18zM3 3l18 18"/></symbol>
+  </defs>
+</svg>
+
+<header class="review">
+  <b>Quedamos · prototipo</b>
+  <nav class="tabs">
+    <a data-go="inicio">Inicio</a><a data-go="nota">Nota</a><a data-go="pendientes">Pendientes</a><a data-go="calendario">Calendario</a>
+    <a data-go="perfil">Perfil</a><a data-go="actualizar">Actualización</a><a data-go="login">Login</a><a data-go="estados">Hover y carga</a><a data-go="celular">Celular</a><a data-go="pdf">PDF</a>
+  </nav>
+  <div class="theme"><button data-theme-set="light">Claro</button><button data-theme-set="dark">Oscuro</button></div>
+</header>
+
+<main class="stage" id="stage"></main>
+
+<!-- ================================ TEMPLATES ================================ -->
+<template id="t-side">
+  <aside class="side">
+    <div class="brand"><span class="logo"><svg class="ico"><use href="#i-spark"/></svg></span>Quedamos</div>
+    <div class="rec-big"><span class="dot-rec"></span>Grabar<span class="caret">Mixto ▾</span></div>
+    <nav class="nav">
+      <a data-go="inicio" data-k="inicio"><svg class="ico"><use href="#i-home"/></svg>Inicio</a>
+      <a data-go="nota" data-k="nota"><svg class="ico"><use href="#i-notes"/></svg>Notas</a>
+      <a data-go="calendario" data-k="calendario"><svg class="ico"><use href="#i-cal"/></svg>Calendario</a>
+      <a data-go="pendientes" data-k="pendientes"><svg class="ico"><use href="#i-check"/></svg>Pendientes<span class="count">2</span></a>
+    </nav>
+    <div class="foot" data-go="perfil" data-k="perfil"><span class="ava"></span><div><b>Klever</b><small><i></i>Sincronizado</small></div></div>
+  </aside>
+</template>
+
+<!-- INICIO -->
+<template id="t-inicio">
+  <p class="note-tag">Inicio · con una grabación en curso (barra inferior) — pase el mouse por las filas</p>
+  <div class="desk"><div data-side="inicio"></div>
+    <section class="content">
+      <div class="page-h"><div><h1>Buenos días, Klever.</h1><p>Sábado, 28 de noviembre</p></div><div class="search" style="width:340px"><svg class="ico"><use href="#i-search"/></svg>Buscar en sus notas<kbd>⌘K</kbd></div></div>
+      <div class="grid2">
+        <div style="display:grid;gap:16px;align-content:start">
+          <div class="card"><p class="h-sec">Lo próximo</p>
+            <div class="next"><div class="when"><b>16:00</b><small>Hoy</small></div><div class="what"><b>Planificación de ventas de diciembre</b><small>Google Meet · empieza en 6 h · aviso 10 min antes</small></div><button class="btn ghost">Unirse</button></div>
+          </div>
+          <div class="card"><div class="quick"><svg class="ico muted"><use href="#i-edit"/></svg><input placeholder="Anote algo rápido… (Enter para guardar)" /></div></div>
+          <div class="card"><p class="h-sec">Recientes</p>
+            <div class="row"><div class="grow"><b>Planificación de ventas de diciembre</b><small>Hoy 09:30 · 42 min · Ventas</small></div><span class="chip warn">Borrador IA</span></div>
+            <div class="row"><div class="grow"><b>Llamada con el banco por la línea de crédito</b><small>Ayer 11:00 · Finanzas</small></div></div>
+            <div class="row"><div class="grow"><b>Idea: app de turnos para la farmacia</b><small>Miércoles · Proyecto Odoo</small></div><svg class="ico star" style="width:15px"><use href="#i-star"/></svg></div>
+          </div>
+        </div>
+        <div style="display:grid;gap:16px;align-content:start">
+          <div class="card"><p class="h-sec">Requiere atención · 2</p>
+            <div class="row"><span class="box"></span><div class="grow"><b>Enviar estados financieros al banco</b><small>Llamada con el banco · Klever</small></div><span class="chip due">ayer</span></div>
+            <div class="row is-hover"><span class="box"></span><div class="grow"><b>Revisar inventario de la bodega 2</b><small>Planificación de ventas</small></div><button class="btn quiet icon sm hover-act" title="Añadir al calendario"><svg class="ico"><use href="#i-calplus"/></svg></button><span class="chip due">hoy</span></div>
+          </div>
+          <div class="card"><p class="h-sec">Fijadas</p>
+            <div class="row"><svg class="ico star" style="width:15px"><use href="#i-star"/></svg><div class="grow"><b>Idea: app de turnos para la farmacia</b><small>Proyecto Odoo</small></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="recbar"><span class="dot-rec pulse"></span><span class="time js-rectime">12:47</span><span class="wave js-wave"></span><span class="src">Micrófono + PC</span><button class="btn sm"><svg class="ico"><use href="#i-pause"/></svg>Pausar</button><button class="btn sm stop"><svg class="ico"><use href="#i-stop"/></svg>Detener</button></div>
+    </section>
+  </div>
+</template>
+
+<!-- NOTA -->
+<template id="t-nota">
+  <p class="note-tag">Nota abierta · procesando con IA (abajo a la derecha) · menú ⋯ abierto · pase el mouse por un pendiente para ver "Añadir al calendario"</p>
+  <div class="desk"><div data-side="nota"></div>
+    <section class="content" style="padding:0">
+      <div class="two" style="margin:0">
+        <section class="list">
+          <div class="search"><svg class="ico"><use href="#i-search"/></svg>Buscar en sus notas<kbd>⌘K</kbd></div>
+          <div class="filters"><span class="f on">Todas</span><span class="f">★ Fijadas</span><span class="f">Ventas</span><span class="f">Equipo</span><span class="f">Finanzas</span><span class="f">Tipo ▾</span></div>
+          <p class="h-sec">Hoy</p>
+          <div class="nrow on"><div class="t"><svg class="ico star" style="width:14px"><use href="#i-star"/></svg>Planificación de ventas de diciembre<time>09:30</time></div><p>Se revisó el stock de temporada y se acordó adelantar…</p><div class="tags"><span class="chip theme">Ventas</span><span class="chip">Reunión</span><span class="chip due">1 vence hoy</span></div></div>
+          <p class="h-sec" style="margin-top:14px">Ayer</p>
+          <div class="nrow"><div class="t">Llamada con el banco por la línea de crédito<time>11:00</time></div><p>El banco pidió estados financieros actualizados…</p><div class="tags"><span class="chip theme">Finanzas</span><span class="chip due">vencido</span></div></div>
+          <p class="h-sec" style="margin-top:14px">Esta semana</p>
+          <div class="nrow"><div class="t">Idea: app de turnos para la farmacia<time>mié</time></div><p>Que los clientes reserven turno para retirar recetas…</p><div class="tags"><span class="chip theme">Proyecto Odoo</span><span class="chip">Idea</span></div></div>
+          <div class="nrow"><div class="t">Reunión semanal del equipo<time>mar</time></div><p>Avance de los proyectos y bloqueos.</p><div class="tags"><span class="chip theme">Equipo</span><span class="chip"><svg class="ico" style="width:12px"><use href="#i-bell"/></svg>mañana 09:00</span></div></div>
+          <div class="nrow"><div class="skel" style="height:14px;width:70%"></div><div class="skel" style="height:12px;width:90%;margin-top:6px"></div></div>
+        </section>
+        <section class="editor">
+          <div class="ed-top">
+            <span class="crumb">Notas / Ventas</span><span class="sp"></span>
+            <button class="btn ghost"><svg class="ico"><use href="#i-mic"/></svg>Grabar aquí</button>
+            <button class="btn accent loading"><span class="spin"></span>Procesando…</button>
+            <button class="btn ghost icon is-hover"><svg class="ico"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="menu" style="right:40px;top:66px">
+            <div class="hl"><svg class="ico"><use href="#i-calplus"/></svg>Añadir al calendario<kbd>⌘⇧C</kbd></div>
+            <div><svg class="ico"><use href="#i-clip"/></svg>Adjuntar archivo</div>
+            <div><svg class="ico"><use href="#i-copy"/></svg>Copiar texto</div>
+            <div><svg class="ico"><use href="#i-file"/></svg>Exportar PDF<kbd>⌘P</kbd></div>
+            <div><svg class="ico"><use href="#i-edit"/></svg>Editar detalles</div>
+            <hr /><div class="danger"><svg class="ico"><use href="#i-trash"/></svg>Eliminar nota</div>
+          </div>
+          <div class="progress" style="top:auto;bottom:18px;right:18px">
+            <div class="head"><span class="spin"></span>Transcribiendo parte 3 de 4<b class="js-pct">48%</b></div>
+            <div class="bar"><span class="js-bar" style="width:48%"></span></div>
+            <ul class="steps"><li class="done">Audio guardado (4 partes, 58 min)</li><li class="now">Transcribiendo con Groq</li><li class="todo">Resumen y pendientes</li></ul>
+            <span class="fine">Puede seguir usando la app mientras tanto.</span>
+          </div>
+          <h1 class="ed-title">Planificación de ventas de diciembre <svg class="ico star" style="width:22px;height:22px;margin-top:6px"><use href="#i-star"/></svg></h1>
+          <div class="ed-meta"><span>Reunión</span><span class="sep">•</span><b>Hoy 09:30</b><span class="sep">•</span><span class="chip theme">Ventas</span><span class="sep">•</span><span>Juan, María, Klever</span><span class="sep">•</span><span>42 min de audio</span></div>
+          <div class="remind"><svg class="ico bell"><use href="#i-bell"/></svg><div class="txt"><b>Hoy 16:00</b> · aviso 10 min antes<small>Google Meet · meet.google.com/abc-defg-hij</small></div><span class="sp"></span>
+            <button class="btn ghost sm js-addcal"><svg class="ico"><use href="#i-calplus"/></svg>Añadir al calendario</button>
+            <button class="btn quiet sm">Cambiar</button></div>
+          <p class="draft">● Borrador de la IA: revíselo<button class="btn ghost sm">Confirmar</button></p>
+          <p class="overview">Se revisó el stock de temporada y se acordó adelantar el pedido al proveedor para no quedarse sin productos en la última semana.</p>
+          <div class="cols">
+            <div>
+              <p class="h-sec">Pendientes</p>
+              <div class="task is-hover"><span class="box"></span><span class="tx">Revisar inventario de la bodega 2</span><span class="who"><button class="btn quiet icon sm cal-quick" title="Añadir al calendario"><svg class="ico"><use href="#i-calplus"/></svg></button><span class="chip due">hoy</span></span></div>
+              <div class="task"><span class="box"></span><span class="tx">Enviar la cotización al proveedor</span><span class="who"><button class="btn quiet icon sm cal-quick"><svg class="ico"><use href="#i-calplus"/></svg></button>Juan · mié</span></div>
+              <div class="task done"><span class="box done"></span><span class="tx">Confirmar stock con bodega</span><span class="who">hecho</span></div>
+              <div class="task add">+ Agregar pendiente</div>
+            </div>
+            <div>
+              <p class="h-sec">Decisiones</p>
+              <ul class="pts"><li>Adelantar el pedido navideño al 5 de diciembre.</li></ul>
+              <p class="h-sec" style="margin-top:18px">Puntos clave</p>
+              <ul class="pts"><li>El stock de la bodega 2 alcanza para dos semanas.</li><li>El proveedor necesita 10 días de anticipación.</li></ul>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+</template>
+
+<!-- PENDIENTES -->
+<template id="t-pendientes">
+  <p class="note-tag">Pendientes · las tareas primero · pase el mouse por una fila: aparece "Añadir al calendario" (1 clic)</p>
+  <div class="desk"><div data-side="pendientes"></div>
+    <section class="content">
+      <div class="page-h"><div><h1>Pendientes</h1><p>4 abiertos · 1 reunión hoy</p></div><div style="display:flex;gap:8px"><span class="f on">Todos</span><span class="f">Míos</span><span class="f">De otros</span></div></div>
+      <div class="banner"><svg class="ico" style="color:var(--accent)"><use href="#i-bell"/></svg><span><b>Active los avisos</b> para enterarse aunque la app esté cerrada, con botón "Unirse" a la reunión.</span><button class="btn accent sm">Activar</button><button class="btn quiet sm">Ahora no</button></div>
+      <div style="max-width:820px">
+        <div class="group-h"><b class="red">Vencidos · 1</b></div>
+        <div class="card" style="padding:4px 18px"><div class="row"><span class="box"></span><div class="grow"><b>Enviar estados financieros al banco</b><small>Llamada con el banco · Klever</small></div><button class="btn quiet sm hover-act"><svg class="ico"><use href="#i-calplus"/></svg>Calendario</button><span class="chip due">ayer</span></div></div>
+        <div class="group-h"><b>Hoy · 2</b></div>
+        <div class="card" style="padding:4px 18px">
+          <div class="row"><svg class="ico" style="color:var(--accent)"><use href="#i-bell"/></svg><div class="grow"><b>Planificación de ventas de diciembre</b><small>Reunión · Google Meet · aviso 10 min antes</small></div><span class="cal-added"><svg class="ico" style="width:15px"><use href="#i-ok"/></svg>En su calendario</span><button class="btn ghost sm">Unirse</button><span class="chip">16:00</span></div>
+          <div class="row is-hover"><span class="box"></span><div class="grow"><b>Revisar inventario de la bodega 2</b><small>Planificación de ventas</small></div><button class="btn quiet sm hover-act"><svg class="ico"><use href="#i-calplus"/></svg>Calendario</button></div>
+        </div>
+        <div class="group-h"><b>Próximos · 2</b></div>
+        <div class="card" style="padding:4px 18px">
+          <div class="row"><span class="box"></span><div class="grow"><b>Preparar el informe de avance</b><small>Reunión semanal · María</small></div><button class="btn quiet sm hover-act"><svg class="ico"><use href="#i-calplus"/></svg>Calendario</button><span class="chip">mañana</span></div>
+          <div class="row"><span class="box"></span><div class="grow"><b>Enviar la cotización al proveedor</b><small>Planificación de ventas · Juan</small></div><button class="btn quiet sm hover-act"><svg class="ico"><use href="#i-calplus"/></svg>Calendario</button><span class="chip">mié 3</span></div>
+        </div>
+        <div class="group-h"><b class="muted">Completados esta semana · 1</b></div>
+      </div>
+      <div class="toast"><svg class="ico ok"><use href="#i-ok"/></svg>Añadido a Google Calendar · <u>Deshacer</u></div>
+    </section>
+  </div>
+</template>
+
+<!-- CALENDARIO -->
+<template id="t-calendario">
+  <p class="note-tag">Calendario · mes + agenda del día con línea de "ahora"</p>
+  <div class="desk"><div data-side="calendario"></div>
+    <section class="content">
+      <div class="page-h"><div><h1>Noviembre 2026</h1><p>3 reuniones y 4 pendientes este mes</p></div>
+        <div style="display:flex;gap:8px;align-items:center"><span class="cal-added"><svg class="ico" style="width:15px"><use href="#i-ok"/></svg>Conectado con Google Calendar</span><button class="btn ghost icon"><svg class="ico"><use href="#i-back"/></svg></button><button class="btn ghost">Hoy</button><button class="btn ghost icon"><svg class="ico"><use href="#i-fwd"/></svg></button></div></div>
+      <div class="cal-wrap">
+        <div class="month js-month"></div>
+        <div class="agenda">
+          <h3>Sábado 28</h3><p class="muted" style="font-size:13px">Hoy · 1 reunión · 2 pendientes</p>
+          <div class="tl">
+            <div class="slot"><time>09:00</time><div class="line"><div class="blk" style="background:var(--hover);border-color:var(--faint)"><b>Planificación de ventas</b><small>Grabada · 42 min · resumen listo</small></div></div></div>
+            <div class="slot"><time>11:00</time><div class="line now"></div></div>
+            <div class="slot"><time>13:00</time><div class="line"></div></div>
+            <div class="slot"><time>16:00</time><div class="line"><div class="blk"><b>Reunión con proveedores</b><small>Google Meet · aviso 15:50</small><div style="display:flex;gap:6px;margin-top:6px"><button class="btn sm accent">Unirse</button><button class="btn sm ghost">Unirse y grabar</button></div></div></div></div>
+            <div class="slot"><time>18:00</time><div class="line"></div></div>
+          </div>
+          <p class="h-sec" style="margin-top:14px">Pendientes de hoy</p>
+          <div class="row"><span class="box"></span><div class="grow"><b>Revisar inventario de la bodega 2</b></div></div>
+          <div class="row"><span class="box"></span><div class="grow"><b>Enviar estados financieros</b><small style="color:var(--danger)">vencido ayer</small></div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</template>
+
+<!-- LOGIN -->
+<template id="t-login">
+  <p class="note-tag">Login · izquierda: celular/web con Google · derecha: app de escritorio esperando el navegador</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;width:1320px">
+    <div class="desk" style="width:auto;height:640px;grid-template-columns:1fr"><div class="login"><div class="login-card">
+      <span class="logo"><svg class="ico" style="width:24px;height:24px"><use href="#i-spark"/></svg></span>
+      <h2>Quedamos</h2><p>Grabe sus reuniones y reciba el resumen, las decisiones y los pendientes.</p>
+      <button class="gbtn is-hover"><span class="g"><svg viewBox="0 0 48 48" width="20" height="20"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.7 13.2l7.8 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.8c4.3-4 6.9-9.9 6.9-17.1z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.9-4.7l-7.8-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.8-5.8l-7.4-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg></span>Continuar con Google</button>
+      <p class="fine" style="max-width:300px">Sus notas, audios y claves quedan en su cuenta, separados de cualquier otro usuario.</p>
+      <p class="fine"><u>Privacidad</u> · <u>Términos</u></p>
+    </div></div></div>
+    <div class="desk" style="width:auto;height:640px;grid-template-columns:1fr"><div class="login"><div class="login-card">
+      <span class="logo"><svg class="ico" style="width:24px;height:24px"><use href="#i-spark"/></svg></span>
+      <h2>Termine en su navegador</h2><p>Abrimos su navegador para que entre con Google. Confirme que ve este mismo código:</p>
+      <div class="code"><span>7</span><span>F</span><span>3</span><span>A</span></div>
+      <p style="display:flex;align-items:center;gap:10px;color:var(--fg);font-weight:700"><span class="dots"><i></i><i></i><i></i></span>Esperando la confirmación…</p>
+      <div style="display:flex;gap:8px"><button class="btn ghost sm">Abrir de nuevo el navegador</button><button class="btn quiet sm">Cancelar</button></div>
+      <p class="fine">El código caduca en 9:42</p>
+    </div></div></div>
+  </div>
+</template>
+
+<!-- ESTADOS -->
+<template id="t-estados">
+  <p class="note-tag">Hover, presionado, foco y estados de carga/espera — todo lo que se mueve está animado de verdad</p>
+  <div class="board">
+    <div class="card"><p>Botones</p>
+      <div class="state-row"><small>Normal · hover · presionado · foco · deshabilitado</small><button class="btn">Guardar</button><button class="btn is-hover">Guardar</button><button class="btn is-press">Guardar</button><button class="btn is-focus">Guardar</button><button class="btn is-disabled">Guardar</button></div>
+      <div class="state-row"><small>Acento · fantasma · silencioso (hover)</small><button class="btn accent">IA</button><button class="btn accent is-hover">IA</button><button class="btn ghost">Grabar aquí</button><button class="btn ghost is-hover">Grabar aquí</button><button class="btn quiet is-hover">Cambiar</button></div>
+      <div class="state-row"><small>Cargando</small><button class="btn accent loading"><span class="spin"></span>Procesando…</button><button class="btn ghost loading"><span class="spin"></span>Guardando</button></div>
+    </div>
+    <div class="card"><p>Filas y casillas</p>
+      <div class="row"><span class="box"></span><div class="grow"><b>Fila normal</b><small>sin acciones visibles</small></div></div>
+      <div class="row is-hover"><span class="box"></span><div class="grow"><b>Fila con mouse encima</b><small>aparece "Añadir al calendario"</small></div><button class="btn quiet icon sm hover-act"><svg class="ico"><use href="#i-calplus"/></svg></button></div>
+      <div class="row"><span class="box done"></span><div class="grow"><b style="text-decoration:line-through;color:var(--faint)">Pendiente hecho</b><small>la casilla se llena en verde</small></div></div>
+      <div class="state-row"><small>Buscador: normal · enfocado</small><div class="search" style="flex:1">Buscar…</div><div class="search is-focus" style="flex:1">proveedor|</div></div>
+    </div>
+    <div class="card"><p>Añadir al calendario (1 toque)</p>
+      <div class="state-row"><small>Antes · enviando · listo</small>
+        <button class="btn ghost sm"><svg class="ico"><use href="#i-calplus"/></svg>Añadir al calendario</button>
+        <button class="btn ghost sm loading"><span class="spin"></span>Añadiendo…</button>
+        <span class="cal-added"><svg class="ico" style="width:15px"><use href="#i-ok"/></svg>En su calendario</span></div>
+      <p class="muted" style="font-size:13px">Con el calendario automático conectado no hay que tocar nada: aparece "En su calendario" solo.</p>
+      <button class="btn ghost sm js-demo-cal" style="justify-self:start"><svg class="ico"><use href="#i-calplus"/></svg>Pruébelo: haga clic</button>
+    </div>
+    <div class="card"><p>Grabando</p>
+      <div class="recbar" style="position:static;transform:none;justify-self:start"><span class="dot-rec pulse"></span><span class="time js-rectime">12:47</span><span class="wave js-wave"></span><button class="btn sm stop icon"><svg class="ico"><use href="#i-stop"/></svg></button></div>
+      <div class="recbar" style="position:static;transform:none;justify-self:start;opacity:.85"><span class="dot-rec" style="background:var(--faint)"></span><span class="time">En pausa · 12:47</span><button class="btn sm">Reanudar</button></div>
+    </div>
+    <div class="card"><p>Procesando con IA</p>
+      <div class="progress" style="position:static;width:auto;animation:none">
+        <div class="head"><span class="spin"></span><span class="js-steplabel">Transcribiendo parte 3 de 4</span><b class="js-pct">48%</b></div>
+        <div class="bar"><span class="js-bar" style="width:48%"></span></div>
+        <span class="fine js-wait">Groq pide esperar 0:42 (límite por hora). Sigue solo.</span>
+      </div>
+    </div>
+    <div class="card"><p>Cargando lista (esqueleto)</p>
+      <div style="display:grid;gap:12px">
+        <div style="display:grid;gap:6px"><div class="skel" style="height:14px;width:65%"></div><div class="skel" style="height:11px;width:92%"></div></div>
+        <div style="display:grid;gap:6px"><div class="skel" style="height:14px;width:50%"></div><div class="skel" style="height:11px;width:80%"></div></div>
+        <div style="display:grid;gap:6px"><div class="skel" style="height:14px;width:58%"></div><div class="skel" style="height:11px;width:86%"></div></div>
+      </div>
+    </div>
+    <div class="card"><p>Sincronización</p>
+      <div class="state-row"><span class="sync"><span class="spin" style="width:12px;height:12px;border-width:2px"></span>Sincronizando…</span><span class="sync ok"><i></i>Sincronizado</span><span class="sync off"><i></i>Sin conexión · se sube al volver</span><span class="sync err"><i></i>Error · reintentar</span></div>
+      <p class="muted" style="font-size:13px">Discreto en la esquina de la cuenta; solo llama la atención si algo falla.</p>
+    </div>
+    <div class="card"><p>Avisos (toast)</p>
+      <div class="toast" style="position:static;transform:none;justify-self:start"><svg class="ico ok"><use href="#i-ok"/></svg>Nota guardada</div>
+      <div class="toast" style="position:static;transform:none;justify-self:start;background:var(--danger);color:#fff"><svg class="ico"><use href="#i-cloudoff"/></svg>No se pudo transcribir · <u>Reintentar</u></div>
+    </div>
+    <div class="card"><p>Vacíos</p>
+      <div class="empty"><span class="big"><svg class="ico" style="width:24px;height:24px"><use href="#i-check"/></svg></span><b>Todo al día</b><span>No tiene pendientes. Los que encuentre la IA aparecerán aquí.</span></div>
+    </div>
+  </div>
+</template>
+
+<!-- CELULAR -->
+<template id="t-celular">
+  <p class="note-tag">Celular · Inicio · Nota · Pendientes · Grabando · Al tocar Grabar</p>
+  <div class="phones">
+    <div class="pw"><div class="phone">
+      <div class="status"><span>9:41</span><span>5G ▮▮▮</span></div>
+      <div class="p-top"><div class="search"><svg class="ico"><use href="#i-search"/></svg>Buscar</div><span class="ava"></span></div>
+      <div class="p-body">
+        <p class="p-h1">Buenos días, Klever.</p><p class="p-date">Sábado, 28 de noviembre</p>
+        <div class="card"><p class="h-sec">Lo próximo</p><div class="next"><div class="when"><b>16:00</b><small>Hoy</small></div><div class="what"><b style="font-size:14.5px">Planificación de ventas</b><small>Google Meet · en 6 h</small></div><button class="btn ghost sm">Unirse</button></div></div>
+        <div class="card"><div class="quick"><input placeholder="Anote algo rápido…" /><button class="btn sm">Guardar</button></div></div>
+        <div class="card"><p class="h-sec">Requiere atención · 2</p>
+          <div class="row"><span class="box"></span><div class="grow"><b>Enviar estados financieros</b><small>Llamada con el banco</small></div><span class="chip due">ayer</span></div>
+          <div class="row"><span class="box"></span><div class="grow"><b>Revisar inventario bodega 2</b><small>Planificación de ventas</small></div><span class="chip due">hoy</span></div>
+        </div>
+        <div class="card"><p class="h-sec">Recientes</p><div class="row"><div class="grow"><b>Planificación de ventas</b><small>Hoy 09:30 · Ventas</small></div></div></div>
+      </div>
+      <div class="tabbar"><div class="on"><svg class="ico"><use href="#i-home"/></svg>Inicio</div><div><svg class="ico"><use href="#i-notes"/></svg>Notas</div><div><span class="fab"><span></span></span></div><div><svg class="ico"><use href="#i-cal"/></svg>Calendario</div><div><svg class="ico"><use href="#i-check"/></svg>Pendientes</div></div>
+    </div></div>
+    <div class="pw"><div class="phone" style="background:var(--surface)">
+      <div class="status"><span>9:41</span><span>5G ▮▮▮</span></div>
+      <div class="p-note-top"><button class="btn quiet icon"><svg class="ico"><use href="#i-back"/></svg></button><span class="sp"></span><button class="btn quiet icon star"><svg class="ico"><use href="#i-star"/></svg></button><button class="btn quiet icon"><svg class="ico"><use href="#i-more"/></svg></button></div>
+      <div class="p-body" style="padding-top:2px">
+        <p class="p-h1" style="font-size:24px">Planificación de ventas de diciembre</p>
+        <div class="ed-meta" style="margin:8px 0 12px"><span>Reunión · <b>Hoy 09:30</b></span><span class="chip theme">Ventas</span></div>
+        <div class="remind" style="margin-bottom:0;flex-wrap:wrap"><svg class="ico bell"><use href="#i-bell"/></svg><div class="txt"><b>Hoy 16:00</b><small>Aviso 10 min antes · Meet</small></div><span class="sp"></span><button class="btn ghost sm icon"><svg class="ico"><use href="#i-calplus"/></svg></button></div>
+        <div class="p-actions"><button class="btn ghost"><svg class="ico"><use href="#i-mic"/></svg>Grabar aquí</button><button class="btn accent"><svg class="ico"><use href="#i-spark"/></svg>Regenerar</button></div>
+        <p class="overview" style="font-size:15px">Se revisó el stock de temporada y se acordó adelantar el pedido al proveedor para no quedarse sin productos.</p>
+        <p class="h-sec">Pendientes</p>
+        <div class="task"><span class="box"></span><span class="tx">Revisar inventario bodega 2</span><span class="who"><span class="chip due">hoy</span></span></div>
+        <div class="task"><span class="box"></span><span class="tx">Enviar la cotización</span><span class="who">Juan · mié</span></div>
+        <p class="h-sec" style="margin-top:16px">Decisiones</p><ul class="pts"><li>Adelantar el pedido navideño al 5 de diciembre.</li></ul>
+      </div>
+    </div></div>
+    <div class="pw"><div class="phone">
+      <div class="status"><span>9:41</span><span>5G ▮▮▮</span></div>
+      <div class="p-top"><div class="search"><svg class="ico"><use href="#i-search"/></svg>Buscar</div><span class="ava"></span></div>
+      <div class="p-body">
+        <p class="p-h1">Pendientes</p><p class="p-date">4 abiertos · 1 reunión hoy</p>
+        <div class="banner" style="flex-wrap:wrap;font-size:13.5px"><span><b>Active los avisos</b> para enterarse con la app cerrada.</span><button class="btn accent sm">Activar</button></div>
+        <div class="group-h"><b class="red">Vencidos · 1</b></div>
+        <div class="card" style="padding:2px 16px"><div class="row"><span class="box"></span><div class="grow"><b>Enviar estados financieros</b><small>Llamada con el banco</small></div><span class="chip due">ayer</span></div></div>
+        <div class="group-h"><b>Hoy · 2</b></div>
+        <div class="card" style="padding:2px 16px">
+          <div class="row"><svg class="ico" style="color:var(--accent)"><use href="#i-bell"/></svg><div class="grow"><b>Planificación de ventas</b><small>16:00 · Meet</small></div><button class="btn ghost sm">Unirse</button></div>
+          <div class="row"><span class="box"></span><div class="grow"><b>Revisar inventario bodega 2</b><small>Planificación de ventas</small></div><button class="btn quiet sm icon"><svg class="ico"><use href="#i-calplus"/></svg></button></div>
+        </div>
+        <div class="group-h"><b>Próximos · 2</b></div>
+        <div class="card" style="padding:2px 16px"><div class="row"><span class="box"></span><div class="grow"><b>Preparar el informe</b><small>Reunión semanal · María</small></div><span class="chip">mañana</span></div></div>
+      </div>
+      <div class="tabbar"><div><svg class="ico"><use href="#i-home"/></svg>Inicio</div><div><svg class="ico"><use href="#i-notes"/></svg>Notas</div><div><span class="fab"><span></span></span></div><div><svg class="ico"><use href="#i-cal"/></svg>Calendario</div><div class="on"><svg class="ico"><use href="#i-check"/></svg>Pendientes</div></div>
+    </div></div>
+    <div class="pw"><div class="phone">
+      <div class="status"><span>9:41</span><span>5G ▮▮▮</span></div>
+      <div class="p-top"><div class="search"><svg class="ico"><use href="#i-search"/></svg>Buscar</div><span class="ava"></span></div>
+      <div class="p-body"><p class="p-h1">Buenos días, Klever.</p><p class="p-date">Grabando en segundo plano</p>
+        <div class="card"><p class="h-sec">Procesando</p><div class="head" style="display:flex;align-items:center;gap:10px;font-weight:700"><span class="spin"></span><span class="js-steplabel">Transcribiendo parte 3 de 4</span><b class="js-pct" style="margin-left:auto;color:var(--accent)">48%</b></div><div class="bar" style="margin-top:10px"><span class="js-bar" style="width:48%"></span></div></div>
+      </div>
+      <div class="p-rec"><span class="dot-rec pulse"></span><span class="time js-rectime">12:47</span><span class="wave js-wave" style="flex:1"></span><button class="btn sm icon"><svg class="ico"><use href="#i-pause"/></svg></button><button class="btn sm stop icon"><svg class="ico"><use href="#i-stop"/></svg></button></div>
+      <div class="tabbar"><div class="on"><svg class="ico"><use href="#i-home"/></svg>Inicio</div><div><svg class="ico"><use href="#i-notes"/></svg>Notas</div><div><span class="fab" style="background:var(--rec)"><span style="background:#fff;border-radius:4px;width:16px;height:16px"></span></span></div><div><svg class="ico"><use href="#i-cal"/></svg>Calendario</div><div><svg class="ico"><use href="#i-check"/></svg>Pendientes</div></div>
+    </div></div>
+    <div class="pw"><div class="phone">
+      <div class="status"><span>9:41</span><span>5G ▮▮▮</span></div>
+      <div class="p-top"><div class="search"><svg class="ico"><use href="#i-search"/></svg>Buscar</div><span class="ava"></span></div>
+      <div class="p-body"><p class="p-h1">Buenos días, Klever.</p></div>
+      <div class="sheet-dim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <p class="p-h1" style="font-size:21px;margin-bottom:4px">¿Qué quiere grabar?</p>
+        <p class="muted" style="margin-bottom:16px">Se guarda solo cada 15 minutos.</p>
+        <div class="opt on"><span class="oi"><svg class="ico"><use href="#i-mic"/></svg></span><div><b>Nota nueva</b><small>Con el micrófono del teléfono</small></div><span class="radio"></span></div>
+        <div class="opt"><span class="oi"><svg class="ico"><use href="#i-notes"/></svg></span><div><b>Seguir en una nota</b><small>Añadir a "Planificación de ventas"</small></div><span class="radio"></span></div>
+        <p class="muted" style="font-size:12.5px;margin:4px 0 16px">Para grabar Zoom o Meet con el audio de los demás, use la app de computadora.</p>
+        <button class="btn" style="width:100%;height:54px;font-size:16px;border-radius:14px"><span class="dot-rec"></span>Empezar a grabar</button>
+      </div>
+    </div></div>
+  </div>
+</template>
+
+<!-- PERFIL -->
+<template id="t-perfil">
+  <p class="note-tag">Perfil y ajustes · se abre tocando su nombre abajo a la izquierda (en el celular, su foto arriba a la derecha)</p>
+  <div class="desk" style="height:auto;min-height:860px"><div data-side="perfil"></div>
+    <section class="content">
+      <div class="page-h"><div><h1>Su cuenta</h1><p>Perfil, ajustes y datos</p></div></div>
+      <div class="prof">
+        <nav class="prof-nav"><a class="on">Perfil</a><a>Grabación e IA</a><a>Avisos y calendario</a><a>Apariencia</a><a>Datos y privacidad</a><a>Acerca de <span class="upd-badge" style="display:inline-block;margin-left:6px"></span></a></nav>
+        <div class="prof-main">
+          <div class="card"><div class="who"><span class="ava"></span><div class="grow" style="flex:1"><b>Klever Ontaneda</b><span class="muted">kleverontaneda@gmail.com · con Google</span></div><span class="sync ok"><i></i>Sincronizado hace 1 min</span></div></div>
+          <div class="grid2" style="grid-template-columns:1fr 1fr">
+            <div class="card"><p class="h-sec">Espacio usado</p><p style="font-weight:900;font-size:22px;letter-spacing:-.03em">312 MB <span class="muted" style="font-size:14px;font-weight:500">de 2 GB</span></p>
+              <div class="meter" style="margin:10px 0 8px"><i style="width:13%;background:var(--accent)"></i><i style="width:2%;background:var(--ok)"></i></div>
+              <small class="muted"><span style="color:var(--accent)">●</span> Audios 298 MB &nbsp; <span style="color:var(--ok)">●</span> Notas 14 MB</small></div>
+            <div class="card"><p class="h-sec">Este mes</p><p style="font-weight:900;font-size:22px;letter-spacing:-.03em">18 h <span class="muted" style="font-size:14px;font-weight:500">grabadas · 46 notas</span></p><small class="muted">31 pendientes encontrados · 24 completados</small></div>
+          </div>
+          <div class="card"><p class="h-sec">Grabación e IA</p>
+            <div class="set"><div class="grow"><b>Idioma de las grabaciones</b><small>Evita que la IA confunda el idioma</small></div><span class="sel">Español ▾</span></div>
+            <div class="set"><div class="grow"><b>Fuente por defecto</b><small>En la computadora</small></div><span class="seg"><span>Micrófono</span><span class="on">Mixto</span><span>Solo PC</span></span></div>
+            <div class="set"><div class="grow"><b>Clave de Groq</b><small>Para transcribir · <span class="key">gsk_••••••••3f9a</span></small></div><span class="chip ok">✓ funciona</span><button class="btn ghost sm">Cambiar</button></div>
+            <div class="set"><div class="grow"><b>Clave del resumen (DeepSeek)</b><small><span class="key">sk-••••••••77c1</span></small></div><span class="chip ok">✓ funciona</span><button class="btn ghost sm">Cambiar</button></div>
+          </div>
+          <div class="card"><p class="h-sec">Avisos y calendario</p>
+            <div class="set"><div class="grow"><b>Avisos en este dispositivo</b><small>Aunque la app esté cerrada</small></div><span class="toggle on"></span></div>
+            <div class="set"><div class="grow"><b>Avisar antes de las reuniones</b></div><span class="sel">10 minutos ▾</span></div>
+            <div class="set"><div class="grow"><b>Calendario automático</b><small>Sus reuniones y pendientes aparecen solos en Google Calendar</small></div><span class="cal-added"><svg class="ico" style="width:15px"><use href="#i-ok"/></svg>Conectado</span><button class="btn quiet sm">Copiar enlace</button></div>
+          </div>
+          <div class="card"><p class="h-sec">Apariencia</p>
+            <div class="set"><div class="grow"><b>Tema</b></div><span class="seg js-themeseg"><span data-t="light">Claro</span><span data-t="dark">Oscuro</span><span data-t="auto">Automático</span></span></div>
+          </div>
+          <div class="card"><p class="h-sec">Datos y privacidad</p>
+            <div class="set"><div class="grow"><b>Exportar todo</b><small>Notas y transcripciones en un archivo</small></div><button class="btn ghost sm">Descargar copia</button></div>
+            <div class="set"><div class="grow"><b>Cerrar sesión</b><small>Borra las notas de este dispositivo; siguen en su cuenta</small></div><button class="btn ghost sm">Cerrar sesión</button></div>
+          </div>
+          <div class="card danger-zone"><div class="set"><div class="grow"><b style="color:var(--danger)">Eliminar cuenta</b><small>Borra para siempre sus notas, audios y avisos</small></div><button class="btn sm" style="background:var(--danger);color:#fff">Eliminar…</button></div></div>
+          <div class="card"><p class="h-sec">Acerca de</p>
+            <div class="set"><div class="grow"><b>Quedamos 1.2.0</b><small>Hay una versión nueva: 1.3.0</small></div><button class="btn accent sm">Actualizar</button></div>
+            <div class="set"><div class="grow"><b>Términos · Privacidad · Licencias</b></div><svg class="ico muted"><use href="#i-fwd"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <p class="note-tag">Perfil en el celular</p>
+  <div class="phones">
+    <div class="pw"><div class="phone">
+      <div class="status"><span>9:41</span><span>5G ▮▮▮</span></div>
+      <div class="p-note-top"><button class="btn quiet icon"><svg class="ico"><use href="#i-back"/></svg></button><b style="font-size:16px">Su cuenta</b><span class="sp"></span></div>
+      <div class="p-body">
+        <div class="card"><div class="who"><span class="ava" style="width:48px;height:48px"></span><div><b style="font-size:17px">Klever Ontaneda</b><small class="muted">kleverontaneda@gmail.com</small></div></div>
+          <div class="meter" style="margin:14px 0 6px"><i style="width:13%;background:var(--accent)"></i></div><small class="muted">312 MB de 2 GB · sincronizado</small></div>
+        <div class="card" style="padding:4px 16px">
+          <div class="set"><div class="grow"><b>Idioma</b></div><span class="muted">Español ›</span></div>
+          <div class="set"><div class="grow"><b>Claves de IA</b></div><span class="chip ok">✓ 2</span></div>
+          <div class="set"><div class="grow"><b>Avisos</b></div><span class="toggle on"></span></div>
+          <div class="set"><div class="grow"><b>Avisar antes</b></div><span class="muted">10 min ›</span></div>
+          <div class="set"><div class="grow"><b>Calendario automático</b></div><span class="cal-added">✓ Conectado</span></div>
+          <div class="set"><div class="grow"><b>Tema</b></div><span class="muted">Automático ›</span></div>
+        </div>
+        <div class="card" style="padding:4px 16px">
+          <div class="set"><div class="grow"><b>Exportar todo</b></div><span class="muted">›</span></div>
+          <div class="set"><div class="grow"><b>Cerrar sesión</b></div></div>
+          <div class="set"><div class="grow"><b style="color:var(--danger)">Eliminar cuenta</b></div></div>
+        </div>
+        <p class="muted" style="text-align:center;font-size:12.5px">Quedamos 1.3.0 · al día</p>
+      </div>
+    </div></div>
+  </div>
+</template>
+
+<!-- ACTUALIZACIÓN -->
+<template id="t-actualizar">
+  <p class="note-tag">Actualización · 1) aviso discreto cuando hay versión nueva · 2) descargando · 3) qué hay de nuevo · nunca interrumpe una grabación</p>
+  <div class="desk"><div data-side="inicio"></div>
+    <section class="content">
+      <div class="page-h"><div><h1>Buenos días, Klever.</h1><p>Sábado, 28 de noviembre</p></div></div>
+      <div style="display:grid;gap:14px;max-width:530px">
+        <p class="h-sec">1 · Hay una versión nueva (aparece abajo, se puede posponer)</p>
+        <div class="upd-bar"><svg class="ico"><use href="#i-spark"/></svg><span style="flex:1"><b>Versión 1.3.0 lista.</b> <span style="opacity:.7">Se instala al reiniciar.</span></span><button class="btn sm">Más tarde</button><button class="btn sm go">Reiniciar ahora</button></div>
+        <p class="h-sec" style="margin-top:8px">2 · Descargando en segundo plano</p>
+        <div class="upd-bar"><span class="spin" style="border-color:color-mix(in srgb, var(--on-ink) 25%, transparent);border-top-color:var(--on-ink)"></span><span style="flex:1">Descargando la actualización… <b class="js-pct">48%</b></span><div class="bar" style="width:160px;background:color-mix(in srgb, var(--on-ink) 15%, transparent)"><span class="js-bar" style="width:48%"></span></div></div>
+        <p class="h-sec" style="margin-top:8px">3 · Si está grabando</p>
+        <div class="upd-bar" style="opacity:.92"><span class="dot-rec pulse"></span><span style="flex:1"><span><b>Actualización lista.</b> <span style="opacity:.7">Se instala al terminar de grabar.</span></span></span><button class="btn sm">Entendido</button></div>
+        <p class="h-sec" style="margin-top:8px">En el celular (app web)</p>
+        <div class="toast" style="position:static;transform:none;justify-self:start"><svg class="ico" style="color:var(--accent)"><use href="#i-spark"/></svg>Hay una versión nueva · <u>Actualizar</u></div>
+      </div>
+      <div class="modal-dim" style="background:none;inset:auto;right:36px;top:110px"><div class="modal">
+        <span class="chip theme" style="justify-self:start">Novedades · 1.3.0</span>
+        <h3>Quedamos se actualizó</h3>
+        <ul><li>Añadir al calendario con un toque, desde cualquier pendiente.</li><li>"Unirse y grabar": entra a la reunión y empieza a grabar a la vez.</li><li>Modo oscuro automático.</li><li>Grabaciones largas un 30 % más rápidas.</li></ul>
+        <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn quiet">Ver todo</button><button class="btn accent">Listo</button></div>
+      </div></div>
+    </section>
+  </div>
+</template>
+
+<!-- PDF -->
+<template id="t-pdf">
+  <p class="note-tag">Exportar PDF · siempre en claro (papel) · página A4</p>
+  <article class="pdf-page">
+    <header class="pdf-head"><span class="b"><span></span>Quedamos</span><small>Exportado el 28 nov 2026, 10:12</small></header>
+    <h1>Planificación de ventas de diciembre</h1>
+    <dl class="pdf-meta"><div><dt>Tipo</dt><dd>Reunión</dd></div><div><dt>Fecha</dt><dd>Sáb 28 nov · 09:30</dd></div><div><dt>Duración</dt><dd>42 min</dd></div><div><dt>Tema</dt><dd>Ventas</dd></div><div style="grid-column:1/-1;margin-top:6px"><dt>Participantes</dt><dd>Juan, María, Klever</dd></div></dl>
+    <h2>Resumen</h2>
+    <p class="lead">Se revisó el stock de temporada y se acordó adelantar el pedido al proveedor para no quedarse sin productos en la última semana.</p>
+    <h2>Decisiones</h2>
+    <ul><li>Adelantar el pedido navideño al 5 de diciembre.</li></ul>
+    <h2>Pendientes</h2>
+    <table class="pdf-tbl"><thead><tr><th style="width:24px"></th><th>Tarea</th><th>Responsable</th><th>Fecha</th></tr></thead>
+      <tbody><tr><td><span class="cb"></span></td><td>Revisar inventario de la bodega 2</td><td>—</td><td>Sáb 28 nov</td></tr><tr><td><span class="cb"></span></td><td>Enviar la cotización al proveedor</td><td>Juan</td><td>Mié 3 dic</td></tr></tbody></table>
+    <h2>Puntos clave</h2>
+    <ul><li>El stock de la bodega 2 alcanza para dos semanas.</li><li>El proveedor necesita 10 días de anticipación.</li></ul>
+    <h2>Inferido por la IA (no se dijo explícitamente)</h2>
+    <p class="pdf-inferred">Por el plazo del proveedor, el pedido debe confirmarse esta semana.</p>
+    <h2>Transcripción</h2>
+    <div class="pdf-transcript"><p><b>09:30</b> Revisamos el stock de temporada; la bodega 2 alcanza para unas dos semanas.</p><p><b>09:34</b> El proveedor necesita diez días de anticipación para el pedido navideño.</p><p><b>09:41</b> Acordamos adelantar el pedido al 5 de diciembre.</p><p><b>09:44</b> Juan envía la cotización antes del miércoles.</p><p><b>09:52</b> Klever revisa hoy el inventario de la bodega 2.</p><p><b>10:05</b> Cierre de la reunión.</p></div>
+    <footer class="pdf-foot"><span>Generado con Quedamos · resumen hecho con IA, revisado por Klever</span><span>Página 1 de 1</span></footer>
+  </article>
+</template>
+
+<script>
+const stage = document.getElementById('stage')
+const MONTH = [
+  [26,'out'],[27,'out'],[28,'out'],[29,'out'],[30,'out'],[31,'out'],[1],
+  [2],[3],[4,'',[['task','Informe mensual']]],[5],[6],[7],[8],
+  [9],[10,'',[['meet','Comité 10:00']]],[11],[12],[13],[14],[15],
+  [16],[17],[18,'',[['meet','Proveedor 15:00']]],[19],[20],[21],[22],
+  [23],[24],[25,'',[['meet','Equipo 09:00']]],[26],[27,'',[['due','Estados financieros']]],[28,'today sel',[['meet','Ventas 16:00'],['task','Inventario bodega 2']]],[29,'',[['meet','Equipo 09:00']]],
+  [30],[1,'out'],[2,'out'],[3,'out',[['task','Cotización']]],[4,'out'],[5,'out'],[6,'out'],
+]
+function render(name) {
+  const tpl = document.getElementById(`t-${name}`) || document.getElementById('t-inicio')
+  stage.replaceChildren(tpl.content.cloneNode(true))
+  stage.querySelectorAll('[data-side]').forEach((slot) => {
+    const side = document.getElementById('t-side').content.cloneNode(true)
+    side.querySelector(`[data-k="${slot.dataset.side}"]`)?.classList.add('on')
+    slot.replaceWith(side)
+  })
+  const m = stage.querySelector('.js-month')
+  if (m) {
+    m.innerHTML = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map((d) => `<div class="dow">${d}</div>`).join('') +
+      MONTH.map(([n, cls = '', evs = []]) => `<div class="day ${cls}"><span class="n">${n}</span>${evs.map(([k, t]) => `<span class="ev ${k}">${t}</span>`).join('')}</div>`).join('')
+  }
+  stage.querySelectorAll('.js-wave').forEach((w) => {
+    w.innerHTML = Array.from({ length: 22 }, (_, i) => `<i style="animation-delay:${(i * 0.07) % 1}s;animation-duration:${0.7 + (i % 5) * 0.12}s"></i>`).join('')
+  })
+  document.querySelectorAll('.review .tabs a').forEach((a) => a.classList.toggle('on', a.dataset.go === name))
+  wire()
+}
+function wire() {
+  stage.querySelectorAll('[data-go]').forEach((a) => (a.onclick = () => (location.hash = a.dataset.go)))
+  const demo = (btn) => {
+    btn.onclick = () => {
+      btn.classList.add('loading')
+      btn.innerHTML = '<span class="spin"></span>Añadiendo…'
+      setTimeout(() => {
+        const ok = document.createElement('span')
+        ok.className = 'cal-added'
+        ok.innerHTML = '<svg class="ico" style="width:15px"><use href="#i-ok"/></svg>En su calendario'
+        btn.replaceWith(ok)
+      }, 900)
+    }
+  }
+  stage.querySelectorAll('.js-demo-cal, .js-addcal').forEach(demo)
+  const seg = stage.querySelector('.js-themeseg')
+  if (seg) seg.querySelectorAll('span').forEach((s) => {
+    s.classList.toggle('on', s.dataset.t === document.documentElement.dataset.theme)
+    s.onclick = () => { if (s.dataset.t !== 'auto') setTheme(s.dataset.t); render('perfil') }
+  })
+  stage.querySelectorAll('.toggle').forEach((t) => (t.onclick = () => t.classList.toggle('on')))
+  stage.querySelectorAll('.box').forEach((b) => (b.onclick = () => b.classList.toggle('done')))
+}
+// live animations: recording timer + processing progress
+let secs = 767, pct = 48, wait = 42
+setInterval(() => {
+  secs++
+  document.querySelectorAll('.js-rectime').forEach((t) => (t.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`))
+  pct = pct >= 100 ? 12 : pct + 2
+  const label = pct < 70 ? `Transcribiendo parte ${Math.min(4, 1 + Math.floor(pct / 18))} de 4` : pct < 100 ? 'Resumiendo y buscando pendientes' : 'Listo'
+  document.querySelectorAll('.js-pct').forEach((e) => (e.textContent = `${pct}%`))
+  document.querySelectorAll('.js-bar').forEach((e) => (e.style.width = `${pct}%`))
+  document.querySelectorAll('.js-steplabel').forEach((e) => (e.textContent = label))
+  wait = wait <= 0 ? 42 : wait - 1
+  document.querySelectorAll('.js-wait').forEach((e) => (e.textContent = `Groq pide esperar 0:${String(wait).padStart(2, '0')} (límite por hora). Sigue solo.`))
+}, 1000)
+
+const setTheme = (t) => {
+  document.documentElement.dataset.theme = t
+  localStorage.setItem('mockTheme', t)
+  document.querySelectorAll('[data-theme-set]').forEach((b) => b.classList.toggle('on', b.dataset.themeSet === t))
+}
+document.querySelectorAll('[data-theme-set]').forEach((b) => (b.onclick = () => setTheme(b.dataset.themeSet)))
+document.querySelectorAll('.review [data-go]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); location.hash = a.dataset.go }))
+const params = new URLSearchParams(location.search)
+setTheme(params.get('theme') || localStorage.getItem('mockTheme') || 'light')
+const route = () => render(location.hash.slice(1) || 'inicio')
+addEventListener('hashchange', route)
+route()
+</script>
+</body>
+</html>

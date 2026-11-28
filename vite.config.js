@@ -14,11 +14,15 @@ export default defineConfig({
       workbox: {
         // Precache icons too, so the launcher keeps working fully offline.
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+        // The API and the calendar feed must always hit the network, never the app shell.
+        navigateFallbackDenylist: [/^\/api\//, /^\/cal\//],
+        // Reminder notifications (push + "Unirse" button).
+        importScripts: ['push-sw.js'],
       },
       manifest: {
         id: base,
-        name: 'Nota AI',
-        short_name: 'Nota AI',
+        name: 'Quedamos',
+        short_name: 'Quedamos',
         description: 'Grabe reuniones, transcríbalas y resúmalas con IA. Sus notas, calendario y pendientes en un solo lugar.',
         lang: 'es',
         start_url: base,

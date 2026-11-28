@@ -1,0 +1,38 @@
+{
+  // Quedamos on Cloudflare: the built app (dist/) plus the API Worker.
+  // Site at "/" (site/), app at "/app/", API at "/api/". Deploy: npm run deploy:cf
+  "name": "nota-ai",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // Only these paths run the Worker; everything else is served as a static file (free and fast).
+    "run_worker_first": ["/api/*", "/cal/*"]
+  },
+  "d1_databases": [
+    // database_id comes from: npx wrangler d1 create nota-ai
+    { "binding": "DB", "database_name": "nota-ai", "database_id": "4f5aaa66-5482-4a65-82da-b8189b89c38c" }
+  ],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "nota-ai-blobs" }],
+  "vars": {
+    // Public OAuth "Web application" client id from Google Cloud Console (not a secret).
+    "GOOGLE_CLIENT_ID": "541185385417-g4mertta2bk7dt1u19ifcr36cm3ff9m6.apps.googleusercontent.com",
+    // Web trial (no account): one recording of up to 3 min per person every 24 h, processed with your keys.
+    "TRIAL_DAILY_CAP": "100",
+    "TRIAL_COOLDOWN_HOURS": "24",
+    "LLM_URL": "https://api.deepseek.com",
+    "LLM_MODEL": "deepseek-chat",
+    "USER_QUOTA_MB": "2048",
+    // Web Push (reminders): public key; the private one is the VAPID_PRIVATE_JWK secret.
+    "VAPID_PUBLIC_KEY": "BKL1SsMOpp5LznJIKSvfsNT9P6s-pqZVB45uS-UxkSqIVrq36bg8ZZC1XOL5b2CD0McKYR-THK-1TWMBU049jDk"
+    // Secrets (never in this file): npx wrangler secret put GROQ_API_KEY / LLM_API_KEY / TRIAL_SALT
+    // Optional: "ALLOWED_EMAILS": "a@x.com,b@y.com" to limit who can create an account.
+  },
+  // Reminders are event-driven: one ReminderClock (Durable Object) per user with an alarm set to
+  // that user's next reminder. The cron is only a safety net.
+  "durable_objects": { "bindings": [{ "name": "REMINDERS", "class_name": "ReminderClock" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ReminderClock"] }],
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "observability": { "enabled": true }
+}

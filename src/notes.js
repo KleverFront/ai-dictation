@@ -35,7 +35,48 @@ export const pendingOf = (n) => (n.tasks ?? []).filter((t) => !t.done)
 export const firstLine = (t = '') => t.split('\n').find((l) => l.trim()) ?? ''
 
 export const noteTitle = (n) =>
-  n.title?.trim() || (isStructured(n.summary) && n.summary.title) || (n.audio ? 'Grabación' : 'Nota sin título')
+  n.title?.trim() || (isStructured(n.summary) && n.summary.title) || (n.audio || n.audioKey ? 'Grabación' : 'Nota sin título')
+
+// ---------- reminders + meeting links ----------
+// Only https links are ever stored or opened (no javascript:, data:, etc.).
+export function safeMeetingUrl(url) {
+  try {
+    const u = new URL(String(url).trim())
+    return u.protocol === 'https:' && u.hostname.includes('.') ? u.href : ''
+  } catch {
+    return ''
+  }
+}
+
+const MEETING_RE =
+  /(?:https:\/\/)?(?:[\w-]+\.)?(?:zoom\.us\/(?:j|my|w)\/[^\s<>"')]+|meet\.google\.com\/[a-z]{3,4}-[a-z]{3,4}-[a-z]{3,4}[^\s<>"')]*|teams\.microsoft\.com\/l\/meetup-join\/[^\s<>"')]+|teams\.live\.com\/meet\/[^\s<>"')]+|meet\.jit\.si\/[^\s<>"')]+|[\w-]+\.webex\.com\/[^\s<>"')]+)/i
+
+// First Zoom/Meet/Teams/Jitsi/Webex link found in a text.
+// (the scheme is optional in the text; trailing punctuation from the sentence is dropped).
+export const findMeetingUrl = (text = '') => {
+  const raw = String(text).match(MEETING_RE)?.[0]
+  if (!raw) return ''
+  return safeMeetingUrl((raw.startsWith('https://') ? raw : `https://${raw}`).replace(/[.,;:!?]+$/, ''))
+}
+
+export const meetingLabel = (url) => {
+  const host = (() => {
+    try {
+      return new URL(url).hostname
+    } catch {
+      return ''
+    }
+  })()
+  if (host.includes('zoom')) return 'Zoom'
+  if (host.includes('meet.google')) return 'Google Meet'
+  if (host.includes('teams')) return 'Teams'
+  if (host.includes('jit.si')) return 'Jitsi'
+  if (host.includes('webex')) return 'Webex'
+  return 'la reunión'
+}
+
+// When to alert: the reminder time minus the advance notice.
+export const alertAt = (n) => (n.remindAt ? n.remindAt - (Number(n.remindBefore) || 0) * 60000 : null)
 
 export const blankNote = (extra = {}) => ({
   createdAt: Date.now(),
@@ -54,8 +95,10 @@ export const blankNote = (extra = {}) => ({
   tasks: [],
   title: '',
   body: '',
-  remindAt: null,
+  remindAt: null, // when the meeting/reminder is
+  remindBefore: null, // minutes of advance notice (null = not chosen: 10 with a meeting link, else 0)
   reminded: false,
+  meetingUrl: '', // Zoom / Meet / Teams link: "Unirse" in the reminder
   attachments: [],
   ...extra,
 })

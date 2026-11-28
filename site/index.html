@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>Quedamos — Grabe sus reuniones y reciba el resumen y los pendientes</title>
+    <meta name="description" content="Quedamos graba sus reuniones (también Zoom y Meet), las transcribe y las convierte en resumen, decisiones, pendientes y recordatorios en su calendario." />
+    <meta property="og:title" content="Quedamos" />
+    <meta property="og:description" content="Grabe sus reuniones y reciba el resumen, las decisiones y los pendientes." />
+    <link rel="icon" href="/app/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+    <script type="module" src="/site.js"></script>
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="/"><img src="/app/icon.svg" alt="" width="28" height="28" /><span>Quedamos</span></a>
+      <nav>
+        <a href="#probar">Probar</a>
+        <a href="#como-funciona">Cómo funciona</a>
+        <a href="#descargar" class="nav-cta">Descargar</a>
+      </nav>
+    </header>
+
+    <main>
+      <!-- ---------- hero ---------- -->
+      <section class="hero">
+        <div class="hero-text">
+          <h1>Escuche la reunión.<br /><em>Quedamos</em> toma las notas.</h1>
+          <p class="lead">Graba su reunión, también la de Zoom o Meet, la transcribe y le deja listo el resumen, las decisiones y los pendientes con fecha, directo en su calendario.</p>
+          <div class="cta">
+            <a class="btn primary js-main-download" href="#descargar">Descargar gratis</a>
+            <a class="btn link" href="#probar">o pruébelo 3 minutos aquí →</a>
+          </div>
+          <p class="fine">Mac · Windows · Android</p>
+        </div>
+
+        <figure class="note-sheet" aria-label="Ejemplo de una nota generada">
+          <p class="sheet-meta">Reunión · martes 10:30 · 42 min</p>
+          <p class="sheet-title">Planificación de ventas de diciembre</p>
+          <p class="sheet-text">Se revisó el stock de temporada y se acordó adelantar el pedido al proveedor para no quedarse sin productos en la última semana.</p>
+          <p class="sheet-h">Decisiones</p>
+          <ul class="sheet-list"><li>Adelantar el pedido navideño al 5 de diciembre.</li></ul>
+          <p class="sheet-h">Pendientes</p>
+          <ul class="sheet-tasks">
+            <li><span class="box"></span><span>Enviar la cotización a Juan</span><em>viernes</em></li>
+            <li><span class="box"></span><span>Revisar inventario de la bodega 2</span></li>
+          </ul>
+          <figcaption>Ejemplo de una nota</figcaption>
+        </figure>
+      </section>
+
+      <!-- ---------- trial (right after the hero: it is what convinces) ---------- -->
+      <section id="probar" class="trial">
+        <div class="trial-text">
+          <p class="kicker">Sin cuenta, sin instalar</p>
+          <h2>Pruébelo ahora con su voz.</h2>
+          <p>Grabe hasta <b>3 minutos</b>: cuente una reunión, una idea o lo que tiene que hacer esta semana. En segundos verá lo que haría Quedamos.</p>
+          <p class="fine">Una prueba gratis cada 24 horas, solo con el micrófono. El audio se procesa y se descarta: no se guarda.</p>
+        </div>
+        <div class="trial-box">
+          <div class="js-trial-idle trial-state">
+            <button type="button" class="rec js-trial-start" aria-label="Empezar a grabar"><span></span></button>
+            <p class="js-trial-hint">Pulse para empezar a grabar</p>
+          </div>
+          <div class="js-trial-rec trial-state" hidden>
+            <p class="timer js-trial-timer">0:00 / 3:00</p>
+            <div class="meter"><span class="js-trial-level"></span></div>
+            <button type="button" class="btn primary js-trial-stop">Terminar y ver el resultado</button>
+          </div>
+          <div class="js-trial-busy trial-state" hidden>
+            <div class="spinner"></div>
+            <p class="js-trial-step">Transcribiendo…</p>
+          </div>
+          <div class="js-trial-result result" hidden></div>
+          <p class="error js-trial-error" role="alert"></p>
+          <div class="js-trial-after after" hidden>
+            <p><b>¿Le gustó?</b> Con la app tiene reuniones completas, el audio de Zoom y Meet, y todo guardado en su cuenta.</p>
+            <a class="btn primary" href="#descargar">Descargar Quedamos</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- the one differentiator ---------- -->
+      <section class="feature-main">
+        <div>
+          <p class="kicker">Lo que la hace distinta</p>
+          <h2>Graba Zoom y Meet <em>sin</em> pedirle compartir su pantalla.</h2>
+          <p>Las grabadoras en el navegador le piden "compartir pantalla" para oír a los demás, y eso asusta a cualquiera. La app de Quedamos toma directamente el audio de la computadora: su voz y la de todos en la llamada. Nunca guarda imagen.</p>
+        </div>
+        <div class="compare" aria-hidden="true">
+          <div class="compare-row bad"><span class="compare-tag">Otras</span><span>“¿Compartir toda su pantalla?”</span></div>
+          <div class="compare-row good"><span class="compare-tag">Quedamos</span><span>Grabando audio · micrófono + Zoom</span></div>
+        </div>
+      </section>
+
+      <!-- ---------- how it works: a line, not cards ---------- -->
+      <section id="como-funciona" class="steps-wrap">
+        <h2>Cómo funciona</h2>
+        <ol class="steps">
+          <li><span class="num">1</span><div><h3>Grabe</h3><p>Un botón. Pause si necesita, o siga grabando en la misma nota.</p></div></li>
+          <li><span class="num">2</span><div><h3>La IA ordena</h3><p>Resumen, decisiones y pendientes con responsable y fecha. Fiel a lo que se dijo.</p></div></li>
+          <li><span class="num">3</span><div><h3>Llega a su calendario</h3><p>Los pendientes y recordatorios aparecen solos en el calendario de su celular.</p></div></li>
+        </ol>
+      </section>
+
+      <!-- ---------- the rest, compact ---------- -->
+      <section class="more">
+        <h2>Y además</h2>
+        <dl>
+          <div><dt>Reuniones largas</dt><dd>Dos o cuatro horas: guarda por partes cada 15 minutos y le muestra el avance.</dd></div>
+          <div><dt>Por tema y fijadas</dt><dd>Agrupe sus notas por tema y fije las importantes. La IA sugiere el tema.</dd></div>
+          <div><dt>En todos sus dispositivos</dt><dd>Entre con Google y vea sus notas en la computadora y en el celular.</dd></div>
+          <div><dt>Busque y pregunte</dt><dd>Encuentre cualquier cosa que se dijo, o pregúntele a la IA sobre sus reuniones.</dd></div>
+          <div><dt>Sus claves, su costo</dt><dd>Usa su propia clave de IA, con opciones gratuitas. Usted controla lo que gasta.</dd></div>
+          <div><dt>Su cuenta, separada</dt><dd>Cada persona entra con su Google y solo ve lo suyo. Puede borrarlo todo cuando quiera.</dd></div>
+        </dl>
+      </section>
+
+      <!-- ---------- download ---------- -->
+      <section id="descargar" class="download">
+        <h2>Descargue Quedamos</h2>
+        <div class="downloads">
+          <article class="dl" data-os="mac">
+            <h3>Mac</h3>
+            <p class="fine">macOS 12 o superior · Apple Silicon e Intel</p>
+            <a class="btn primary js-dl-mac" href="#descargar" aria-disabled="true">Próximamente</a>
+            <details><summary>Cómo instalar</summary><ol>
+              <li>Abra el archivo <code>.dmg</code> y arrastre Quedamos a Aplicaciones.</li>
+              <li>La primera vez: clic derecho sobre Quedamos → <b>Abrir</b> → <b>Abrir</b>.</li>
+              <li>Para grabar Zoom o Meet, permita el <b>micrófono</b> y el <b>audio del sistema</b> (solo una vez).</li>
+            </ol></details>
+          </article>
+          <article class="dl" data-os="windows">
+            <h3>Windows</h3>
+            <p class="fine">Windows 10 y 11</p>
+            <a class="btn primary js-dl-windows" href="#descargar" aria-disabled="true">Próximamente</a>
+            <details><summary>Cómo instalar</summary><ol>
+              <li>Abra el instalador <code>.exe</code>.</li>
+              <li>Si aparece "Windows protegió su PC": <b>Más información</b> → <b>Ejecutar de todas formas</b>.</li>
+              <li>Listo: el audio de la computadora se graba sin permisos extra.</li>
+            </ol></details>
+          </article>
+          <article class="dl" data-os="android">
+            <h3>Android</h3>
+            <p class="fine">Desde Chrome, sin tienda</p>
+            <a class="btn primary" href="/app/">Abrir en el celular</a>
+            <details><summary>Cómo instalar</summary><ol>
+              <li>Abra este enlace en Chrome, en su celular.</li>
+              <li>Menú ⋮ → <b>Instalar app</b>.</li>
+              <li>Entre con su cuenta de Google.</li>
+            </ol></details>
+          </article>
+        </div>
+        <p class="fine center js-version"></p>
+      </section>
+
+      <!-- ---------- faq ---------- -->
+      <section class="faq">
+        <h2>Preguntas frecuentes</h2>
+        <details><summary>¿Graba mi pantalla?</summary><p>No. Quedamos solo guarda audio. En la app de escritorio el audio de la computadora se toma directamente, sin compartir la pantalla.</p></details>
+        <details><summary>¿Dónde quedan mis notas y audios?</summary><p>En su dispositivo y, si entra con Google, en su cuenta en la nube de Quedamos, separados de los de cualquier otra persona. Puede borrar su cuenta y todo su contenido desde Ajustes.</p></details>
+        <details><summary>¿Cuánto cuesta?</summary><p>La app es gratis. La transcripción y el resumen usan su propia clave de IA: Groq tiene un plan gratuito y DeepSeek cuesta centavos por reunión.</p></details>
+        <details><summary>¿Puedo grabar a otras personas?</summary><p>Sí, pero avíseles y pida su consentimiento antes de grabar. Es su responsabilidad según la ley de su país.</p></details>
+        <details><summary>¿La IA puede equivocarse?</summary><p>Sí. Por eso cada resumen queda como borrador hasta que usted lo revisa, y lo que la IA deduce sin que se haya dicho aparece aparte, como "Inferido".</p></details>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <p>© 2026 Klever Ontaneda. Todos los derechos reservados.</p>
+      <p><a href="/privacidad/">Privacidad</a> · <a href="/terminos/">Términos de uso</a></p>
+    </footer>
+  </body>
+</html>

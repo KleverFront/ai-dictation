@@ -65,12 +65,14 @@ function waitSeconds(res, body) {
 
 // Groq allows ~2 h of audio per hour on the free tier. When it says "wait", we wait and retry
 // instead of failing; onWait(seconds) lets the UI show the countdown.
-export async function transcribe(blob, apiKey, { onWait } = {}) {
+// language: ISO code ('es', 'en'...) or 'auto'. Telling Whisper the language matters: on short or
+// noisy clips its auto-detection can pick a wrong one (e.g. Icelandic for Spanish speech).
+export async function transcribe(blob, apiKey, { onWait, language = 'es' } = {}) {
   if (!apiKey) throw new Error('Falta la clave de API de Groq (Ajustes).')
   for (let attempt = 1; ; attempt++) {
     let res
     try {
-      res = await transcribeOnce(blob, apiKey)
+      res = await transcribeOnce(blob, apiKey, language)
     } catch (err) {
       // Network hiccup: retry a few times before giving up (the audio stays saved anyway).
       if (attempt >= 4) throw new Error(`Sin conexión con Groq: ${err.message}`)
@@ -93,11 +95,17 @@ export async function transcribe(blob, apiKey, { onWait } = {}) {
   }
 }
 
-function transcribeOnce(blob, apiKey) {
+const WHISPER_HINT = { es: 'Transcripción de una reunión en español.', en: 'Transcript of a meeting in English.' }
+
+function transcribeOnce(blob, apiKey, language) {
   const form = new FormData()
   form.append('file', blob, `audio.${extensionFor(blob.type)}`)
   form.append('model', GROQ_MODEL)
   form.append('response_format', 'json')
+  if (language && language !== 'auto') {
+    form.append('language', language)
+    if (WHISPER_HINT[language]) form.append('prompt', WHISPER_HINT[language])
+  }
 
   return fetch(GROQ_URL, {
     method: 'POST',

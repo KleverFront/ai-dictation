@@ -1,5 +1,6 @@
 import './style.css'
-import { notes, settings, requestPersistence } from './db.js'
+import { notes, settings, requestPersistence, update as updateNote, useDatabase, closeDatabase, databaseName } from './db.js'
+import { pushSupported, pushState, enablePush, disablePush, testPush, startAccount, signOut, deleteAccount, startSync, syncNow, syncStatus, unsyncedCount, hydrate, missingBlobs, calendarFeed } from './cloud.js'
 import { startRecording, SOURCES } from './recorder.js'
 import { transcribe, summarizeChunks, splitForSummary, ask } from './ai.js'
 import { search } from './search.js'
@@ -8,10 +9,11 @@ import { calendarEvents, eventKey, googleCalendarUrl, shareICS } from './calenda
 import {
   pad, dayKey, keyToDate, TYPES, typeLabel, isStructured, when, pendingOf, firstLine,
   noteTitle, blankNote, mergeTasks, noteToText, LOCALE,
+  safeMeetingUrl, findMeetingUrl, meetingLabel, alertAt,
 } from './notes.js'
 
 const $ = (id) => document.getElementById(id)
-const SETTING_KEYS = ['groqKey', 'llmKey', 'llmUrl', 'llmModel']
+const SETTING_KEYS = ['groqKey', 'llmKey', 'llmUrl', 'llmModel', 'sttLang']
 
 // Tiny DOM helper. Uses textContent only, so model output can never inject HTML.
 const h = (tag, props = {}, ...kids) => {
@@ -84,7 +86,9 @@ const state = {
   query: '',
   answer: null, // { question } | { question, answer, sources } | { question, error }
   quick: '', // draft of the quick-capture box, kept across re-renders
+  account: { mode: 'local' }, // cloud: { mode, user: { sub, email, name, picture } }
 }
+const firstName = () => (state.account.user?.name || '').trim().split(/\s+/)[0] || ''
 
 let session = null
 let timerId = null
@@ -103,19 +107,12 @@ function setStatus(msg, { sticky = false } = {}) {
 // ---------- writes ----------
 // Every edit goes through patchNote: read fresh -> modify -> write, one at a time,
 // so a slow AI call can never overwrite what you typed meanwhile (and vice versa).
-let chain = Promise.resolve()
-function patchNote(id, fn) {
-  const run = chain.then(async () => {
-    const n = await notes.get(id)
-    if (!n) return null
-    fn(n)
-    await notes.put(n)
-    const i = state.notes.findIndex((x) => x.id === id)
-    if (i >= 0) state.notes[i] = n
-    return n
-  })
-  chain = run.catch(() => {})
-  return run
+// The queue lives in db.js and is shared with the cloud sync.
+async function patchNote(id, fn) {
+  const n = await updateNote(id, (x) => void fn(x))
+  const i = state.notes.findIndex((x) => x.id === id)
+  if (n && i >= 0) state.notes[i] = n
+  return n
 }
 
 // Debounced autosave per field. flush() runs whatever is still waiting.
@@ -296,10 +293,10 @@ function openCalendarDialog(ev) {
     h('div', { class: 'cal-options' },
       h('a', { class: 'button', href: googleCalendarUrl(ev), target: '_blank', rel: 'noopener', onclick: () => (markSent([ev]), calDialog.close(), renderContent()) },
         'Google Calendar'),
-      h('button', { type: 'button', class: 'ghost', onclick: async () => (calDialog.close(), await sendToCalendar([ev], 'nota-ai-evento.ics')) },
+      h('button', { type: 'button', class: 'ghost', onclick: async () => (calDialog.close(), await sendToCalendar([ev], 'quedamos-evento.ics')) },
         'Otro calendario (Samsung, Apple, Outlook)'),
     ),
-    h('p', { class: 'hint' }, 'El calendario le avisará aunque Nota AI esté cerrada. Si cambia la fecha, envíelo de nuevo: se actualiza, no se duplica.'),
+    h('p', { class: 'hint' }, 'El calendario le avisará aunque la app esté cerrada. Si cambia la fecha, envíelo de nuevo: se actualiza, no se duplica.'),
     h('div', { class: 'row end' }, h('button', { type: 'button', class: 'ghost', onclick: () => calDialog.close() }, 'Cerrar')),
   )
   document.body.append(calDialog)
@@ -325,20 +322,143 @@ const calBtn = (ev) => {
   return b
 }
 
+// ---------- reminder notifications ----------
+let pushStatus = null // 'on' | 'off' | 'denied' | 'unsupported'
+let pushBusy = false
+function refreshPushStatus() {
+  pushState()
+    .then((s) => {
+      if (s !== pushStatus) {
+        pushStatus = s
+        renderContent()
+      }
+    })
+    .catch(() => {})
+}
+
+function pushCard() {
+  const cloud = state.account.mode === 'cloud'
+  if (pushStatus === null) refreshPushStatus()
+  const act = (fn, done) => async (e) => {
+    if (pushBusy) return
+    pushBusy = true
+    e.currentTarget.disabled = true
+    try {
+      const msg = await fn()
+      if (done || msg) setStatus(done ?? msg)
+    } catch (err) {
+      setStatus(err.message)
+    } finally {
+      pushBusy = false
+      pushStatus = null
+      renderContent()
+    }
+  }
+  const iphone = /iPhone|iPad/.test(navigator.userAgent)
+  let body
+  if (!cloud) {
+    // Local-only version: notifications can only fire while the app is open.
+    const perm = 'Notification' in window ? Notification.permission : 'unsupported'
+    body = [
+      h('p', { class: 'hint' }, 'En esta versión los avisos solo suenan con la app abierta. Para recibirlos con la app cerrada, use Quedamos con su cuenta de Google.'),
+      perm === 'default' ? h('button', { type: 'button', class: 'small', onclick: () => Notification.requestPermission().then(renderContent) }, 'Permitir avisos') : null,
+    ]
+  } else if (pushStatus === 'on') {
+    body = [
+      h('p', { class: 'hint' }, '✓ Activados en este dispositivo: le aviso aunque la app esté cerrada, con un botón para unirse a la reunión.'),
+      h('div', { class: 'row' },
+        h('button', { type: 'button', class: 'ghost small', onclick: act(async () => ((await testPush()) ? 'Le envié un aviso de prueba.' : 'No se pudo enviar el aviso de prueba.')) }, 'Enviar aviso de prueba'),
+        h('button', { type: 'button', class: 'ghost small', onclick: act(disablePush, 'Avisos desactivados en este dispositivo.') }, 'Desactivar'),
+      ),
+    ]
+  } else if (pushStatus === 'denied') {
+    body = [h('p', { class: 'hint' }, 'Los avisos están bloqueados para esta app. Actívelos en los ajustes del navegador o del teléfono (Notificaciones → Quedamos) y vuelva aquí.')]
+  } else if (pushStatus === 'unsupported') {
+    body = [h('p', { class: 'hint' }, iphone ? 'En iPhone, primero instale la app: Compartir → "Agregar a inicio". Luego ábrala desde ese ícono y active los avisos aquí.' : 'Este navegador no permite avisos con la app cerrada.')]
+  } else {
+    body = [
+      h('p', { class: 'hint' }, 'Reciba un aviso antes de cada reunión o recordatorio, aunque la app esté cerrada. Si la reunión tiene enlace, el aviso trae un botón "Unirse".'),
+      h('button', { type: 'button', class: 'small', onclick: act(enablePush, 'Avisos activados. Puede enviar un aviso de prueba.') }, 'Activar avisos en este dispositivo'),
+    ]
+  }
+  return card('Avisos', h('div', { class: 'cal-card' }, ...body))
+}
+
+// Home: what is coming in the next 24 h, with "Unirse" at hand.
+function upcomingCard() {
+  const now = Date.now()
+  const soon = state.notes
+    .filter((n) => n.remindAt && n.remindAt > now - 30 * 60000 && n.remindAt < now + 24 * 3600000)
+    .sort((a, b) => a.remindAt - b.remindAt)
+    .slice(0, 3)
+  if (!soon.length) return null
+  return card('Próximo',
+    h('ul', { class: 'plain' },
+      soon.map((n) =>
+        h('li', { class: 'task' },
+          h('button', { type: 'button', class: 'link grow', onclick: () => goToNote(n) },
+            h('span', {}, noteTitle(n)),
+            h('small', {}, `${dayKey(n.remindAt) === todayKey() ? 'Hoy' : fmtShort(n.remindAt)} · ${fmtTime(n.remindAt)}`),
+          ),
+          joinBtn(n),
+        ),
+      ),
+    ),
+  )
+}
+
+// Cloud mode: a private feed URL that Google Calendar subscribes to and refreshes by itself.
+let calUrl = null
+let calLoading = false
+function calendarAuto() {
+  if (state.account.mode !== 'cloud') return null
+  if (!calUrl && !calLoading) {
+    calLoading = true
+    calendarFeed()
+      .then((u) => ((calUrl = u), renderContent()))
+      .catch(() => {})
+      .finally(() => (calLoading = false))
+  }
+  const webcal = calUrl?.replace(/^https:/, 'webcal:')
+  return h('div', { class: 'cal-auto' },
+    h('strong', {}, 'Automático'),
+    h('p', { class: 'hint' }, 'Conéctelo una sola vez: sus recordatorios y pendientes aparecen, cambian y se borran solos en su calendario. Google lo actualiza cada pocas horas.'),
+    calUrl
+      ? h('div', { class: 'row' },
+          h('a', { class: 'button small', href: `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}`, target: '_blank', rel: 'noopener' }, 'Conectar con Google Calendar'),
+          h('button', { type: 'button', class: 'ghost small', onclick: (e) => copyText(calUrl, e.currentTarget) }, 'Copiar enlace'),
+          h('button', {
+            type: 'button',
+            class: 'ghost small',
+            title: 'Si compartió el enlace por error: crea uno nuevo y el anterior deja de funcionar',
+            onclick: async () => {
+              if (!confirm('¿Crear un enlace nuevo? El anterior dejará de funcionar y tendrá que conectar el calendario otra vez.')) return
+              calUrl = await calendarFeed({ reset: true })
+              renderContent()
+            },
+          }, 'Nuevo enlace'),
+        )
+      : h('p', { class: 'hint' }, 'Preparando su enlace privado…'),
+    h('p', { class: 'hint' }, 'El enlace es privado: quien lo tenga puede ver los títulos de sus recordatorios. No lo comparta.'),
+  )
+}
+
 function calendarCard() {
   const events = calendarEvents(state.notes).filter((ev) => (ev.start ?? keyToDate(ev.day).getTime() + 864e5) > Date.now())
   const fresh = events.filter((ev) => !isSent(ev))
   return card('Calendario del celular',
     h('div', { class: 'cal-card' },
+      calendarAuto(),
+      state.account.mode === 'cloud' ? h('strong', {}, 'Manual') : null,
       h('p', { class: 'hint' },
         events.length
           ? `Envíe sus recordatorios y pendientes con fecha al calendario de su teléfono. ${fresh.length ? `${fresh.length} sin enviar.` : 'Todo está enviado.'}`
           : 'Ponga un recordatorio a una nota o una fecha a un pendiente y podrá enviarlo al calendario de su teléfono.'),
       events.length
         ? h('div', { class: 'row' },
-            h('button', { type: 'button', class: 'small', disabled: !fresh.length, onclick: () => sendToCalendar(fresh, 'nota-ai-nuevos.ics') },
+            h('button', { type: 'button', class: 'small', disabled: !fresh.length, onclick: () => sendToCalendar(fresh, 'quedamos-nuevos.ics') },
               ico('calendar'), `Enviar nuevos${fresh.length ? ` (${fresh.length})` : ''}`),
-            h('button', { type: 'button', class: 'ghost small', onclick: () => sendToCalendar(events, 'nota-ai-todo.ics') }, `Enviar todos (${events.length})`),
+            h('button', { type: 'button', class: 'ghost small', onclick: () => sendToCalendar(events, 'quedamos-todo.ics') }, `Enviar todos (${events.length})`),
           )
         : null,
       h('details', {},
@@ -403,7 +523,8 @@ function homeView() {
   const shown = (urgent.length ? urgent : pending).slice(0, 6)
 
   return h('div', { class: 'view' },
-    pageHead(`${greet}.`, fmtDay(today)),
+    pageHead(`${greet}${firstName() ? `, ${firstName()}` : ''}.`, fmtDay(today)),
+    upcomingCard(),
     h('section', { class: 'card quick' },
       quick,
       h('div', { class: 'row end' },
@@ -626,6 +747,7 @@ function pendingView() {
 
   return h('div', { class: 'view' },
     pageHead('Pendientes', 'Compromisos y recordatorios, los más próximos primero.'),
+    pushCard(),
     calendarCard(),
     reminders.length
       ? card('Recordatorios', h('ul', { class: 'plain' },
@@ -633,8 +755,9 @@ function pendingView() {
             h('li', { class: `task ${n.remindAt <= Date.now() ? 'overdue' : ''}` },
               h('button', { type: 'button', class: 'link grow', onclick: () => goToNote(n) },
                 h('span', {}, noteTitle(n)),
-                h('small', {}, `${fmtShort(n.remindAt)} · ${fmtTime(n.remindAt)}`),
+                h('small', {}, `${fmtShort(n.remindAt)} · ${fmtTime(n.remindAt)}${n.remindBefore ? ` · aviso ${BEFORE.find(([v]) => v === Number(n.remindBefore))?.[1] ?? `${n.remindBefore} min antes`}` : ''}`),
               ),
+              n.remindAt > Date.now() - 2 * 3600000 ? joinBtn(n) : null,
               calBtn(calendarEvents([{ ...n, tasks: [] }])[0]),
               h('button', { type: 'button', class: 'x', 'aria-label': 'Quitar recordatorio', onclick: async () => { await setReminder(n.id, ''); await refresh() } }, '×'),
             ),
@@ -818,6 +941,7 @@ async function openSettings() {
   $('llm-key').value = s.llmKey
   $('llm-url').value = s.llmUrl
   $('llm-model').value = s.llmModel
+  $('stt-lang').value = s.sttLang || 'es'
   $('settings').showModal()
 }
 document.querySelectorAll('.js-settings').forEach((b) => (b.onclick = openSettings))
@@ -827,6 +951,7 @@ $('save-settings').onclick = async () => {
   await settings.set('llmKey', $('llm-key').value.trim())
   await settings.set('llmUrl', $('llm-url').value.trim())
   await settings.set('llmModel', $('llm-model').value.trim())
+  await settings.set('sttLang', $('stt-lang').value)
 }
 
 // ---------- backup ----------
@@ -838,26 +963,44 @@ const blobToDataUrl = (blob) =>
   })
 const dataUrlToBlob = async (url) => (await fetch(url)).blob()
 
-const serialize = async (n) => ({
+// Backups carry no sync ids: importing one always creates new notes (and re-uploads their files).
+const SYNC_FIELDS = ['uid', 'dirty', 'unsent', 'updatedAt', 'audioKey']
+const stripSync = (o) => {
+  const out = { ...o }
+  SYNC_FIELDS.forEach((k) => delete out[k])
+  return out
+}
+const dropKey = ({ blobKey, ...rest }) => rest
+const serialize = async (raw) => {
+  if (missingBlobs(raw)) await hydrate(raw.id)
+  const n = stripSync((await notes.get(raw.id)) ?? raw)
+  return serializeNote(n)
+}
+const serializeNote = async (n) => ({
   ...n,
   audio: n.audio ? await blobToDataUrl(n.audio) : null,
-  audioParts: await Promise.all((n.audioParts ?? []).map(async (a) => ({ ...a, blob: await blobToDataUrl(a.blob) }))),
-  attachments: await Promise.all((n.attachments ?? []).map(async (a) => ({ ...a, blob: await blobToDataUrl(a.blob) }))),
+  audioParts: await Promise.all((n.audioParts ?? []).filter((a) => a.blob).map(async (a) => ({ ...dropKey(a), blob: await blobToDataUrl(a.blob) }))),
+  attachments: await Promise.all((n.attachments ?? []).filter((a) => a.blob).map(async (a) => ({ ...dropKey(a), blob: await blobToDataUrl(a.blob) }))),
 })
-const deserialize = async ({ id, ...o }) => ({
-  ...blankNote(),
-  ...o,
-  audio: o.audio ? await dataUrlToBlob(o.audio) : null,
-  audioParts: await Promise.all((o.audioParts ?? []).map(async (a) => ({ ...a, blob: await dataUrlToBlob(a.blob) }))),
-  attachments: await Promise.all((o.attachments ?? []).map(async (a) => ({ ...a, blob: await dataUrlToBlob(a.blob) }))),
-})
+// Only data: URLs are accepted from a backup file (never fetch an arbitrary URL from it).
+const safeBlob = (url) => (typeof url === 'string' && url.startsWith('data:') ? dataUrlToBlob(url) : null)
+const deserialize = async ({ id, ...raw }) => {
+  const o = stripSync(raw)
+  return {
+    ...blankNote(),
+    ...o,
+    audio: await safeBlob(o.audio),
+    audioParts: await Promise.all((o.audioParts ?? []).map(async (a) => ({ ...dropKey(a), blob: await safeBlob(a.blob) }))),
+    attachments: (await Promise.all((o.attachments ?? []).map(async (a) => ({ ...dropKey(a), blob: await safeBlob(a.blob) })))).filter((a) => a.blob),
+  }
+}
 
 $('export-btn').onclick = async () => {
   await flush()
   const out = await Promise.all(state.notes.map(serialize))
   const a = h('a', {
     href: URL.createObjectURL(new Blob([JSON.stringify(out)], { type: 'application/json' })),
-    download: `nota-ai-backup-${todayKey()}.json`,
+    download: `quedamos-backup-${todayKey()}.json`,
   })
   a.click()
   URL.revokeObjectURL(a.href)
@@ -1054,7 +1197,7 @@ async function transcribeNow(id) {
   const todo = pendingPieces(note)
   for (const [k, piece] of todo.entries()) {
     uiHooks.get(id)?.onPart(k, todo.length)
-    const text = (await transcribe(piece.blob, s.groqKey, { onWait: (secs) => uiHooks.get(id)?.onWait(secs) })).trim()
+    const text = (await transcribe(piece.blob, s.groqKey, { language: s.sttLang || 'es', onWait: (secs) => uiHooks.get(id)?.onWait(secs) })).trim()
     await patchNote(id, (n) => {
       n.transcript = [n.transcript, text].filter((t) => t?.trim()).join(piece.cont ? '\n\n[Continuación]\n' : '\n\n')
       if (piece.key === 'main') n.audioTranscribed = true
@@ -1069,6 +1212,10 @@ async function processNote(id) {
   busy.add(id)
   setStatus('')
   try {
+    if (state.account.mode === 'cloud' && missingBlobs(await notes.get(id))) {
+      showProgress('Descargando el audio de la nube...', 0)
+      await hydrate(id)
+    }
     let note = await notes.get(id)
     const where = `Nota: ${noteTitle(note)}. Puede seguir usando la app.`
     // Transcription takes the first 70% of the bar when there is audio left to transcribe.
@@ -1118,6 +1265,7 @@ async function processNote(id) {
       n.summary = summary
       // The AI theme is only a suggestion: never overwrite one the user set.
       if (!n.category?.trim() && summary.category) n.category = summary.category
+      if (!n.meetingUrl) n.meetingUrl = findMeetingUrl(`${n.body ?? ''}\n${n.transcript ?? ''}`)
     })
     busy.delete(id)
     showProgress('Listo', 100)
@@ -1140,17 +1288,37 @@ async function setReminder(id, value) {
   await patchNote(id, (n) => {
     n.remindAt = ts
     n.reminded = false
+    if (ts && n.remindBefore == null) n.remindBefore = n.meetingUrl ? 10 : 0
   })
   if (ts && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission()
   renderContent()
 }
 
+const reminderBody = (n) => {
+  const link = safeMeetingUrl(n.meetingUrl || '')
+  const mins = Math.round((n.remindAt - Date.now()) / 60000)
+  if (mins > 1) return `Empieza en ${mins} minutos${link ? `. Toque "Unirse" para entrar a ${meetingLabel(link)}.` : '.'}`
+  return link ? `Es ahora. Toque "Unirse" para entrar a ${meetingLabel(link)}.` : firstLine(n.body) || 'Es ahora.'
+}
+
 async function notify(n) {
-  const opts = { body: firstLine(n.body) || 'Recordatorio', icon: `${import.meta.env.BASE_URL}icon-192.png` }
+  const link = safeMeetingUrl(n.meetingUrl || '')
+  const opts = {
+    body: reminderBody(n),
+    icon: `${import.meta.env.BASE_URL}icon-192.png`,
+    tag: `nota-${n.uid ?? n.id}`, // same tag as the push: the phone never shows it twice
+    requireInteraction: !!link,
+    data: { uid: n.uid ?? '', meetingUrl: link },
+    actions: link ? [{ action: 'join', title: 'Unirse' }, { action: 'open', title: 'Ver nota' }] : [],
+  }
   try {
     const reg = await navigator.serviceWorker?.getRegistration()
     if (reg) await reg.showNotification(noteTitle(n), opts)
-    else new Notification(noteTitle(n), opts)
+    else {
+      const { actions, ...plain } = opts
+      const note = new Notification(noteTitle(n), plain)
+      note.onclick = () => (link ? window.open(link, '_blank', 'noopener') : goToNote(n))
+    }
   } catch {
     // Notifications are best-effort; the Pending view still shows it as overdue.
   }
@@ -1159,7 +1327,7 @@ async function notify(n) {
 async function checkReminders() {
   const now = Date.now()
   for (const n of [...state.notes]) {
-    if (!n.remindAt || n.reminded || n.remindAt > now) continue
+    if (!n.remindAt || n.reminded || alertAt(n) > now) continue
     await patchNote(n.id, (x) => (x.reminded = true))
     if ('Notification' in window && Notification.permission === 'granted') await notify(n)
     renderContent()
@@ -1219,6 +1387,7 @@ function attachmentsView(n) {
     h('h3', {}, 'Adjuntos'),
     h('div', { class: 'attachments' },
       n.attachments.map((a, i) => {
+        if (!a.blob) return h('figure', { class: 'file' }, h('span', {}, a.name), h('small', {}, 'Descargando…'))
         const url = URL.createObjectURL(a.blob)
         objectUrls.push(url)
         const remove = h('button', {
@@ -1283,6 +1452,65 @@ function tasksView(n) {
   )
 }
 
+const joinBtn = (n, { small = true } = {}) => {
+  const link = safeMeetingUrl(n.meetingUrl || '')
+  if (!link) return null
+  return h('a', { class: `button join${small ? ' small' : ''}`, href: link, target: '_blank', rel: 'noopener noreferrer', title: link }, `Unirse a ${meetingLabel(link)}`)
+}
+
+const BEFORE = [[0, 'A la hora'], [5, '5 min antes'], [10, '10 min antes'], [15, '15 min antes'], [30, '30 min antes'], [60, '1 hora antes'], [1440, '1 día antes']]
+
+function reminderView(n) {
+  const detected = !n.meetingUrl && findMeetingUrl(`${n.body ?? ''}\n${n.transcript ?? ''}`)
+  const linkInput = h('input', {
+    type: 'url',
+    inputmode: 'url',
+    value: n.meetingUrl ?? '',
+    placeholder: 'https://meet.google.com/… · zoom.us/j/… · teams…',
+    onchange: async (e) => {
+      const raw = e.target.value.trim()
+      const link = raw ? safeMeetingUrl(raw.startsWith('http') ? raw : `https://${raw}`) : ''
+      if (raw && !link) return setStatus('Ese enlace no es válido. Pegue la dirección completa de la reunión (https://…).')
+      await patchNote(n.id, (x) => (x.meetingUrl = link))
+      renderContent()
+      await renderEditor()
+    },
+  })
+  return h('section', { class: 'reminder-box' },
+    h('h3', {}, 'Recordatorio'),
+    h('div', { class: 'meta' },
+      h('label', {}, h('span', {}, 'Fecha y hora'),
+        h('input', { type: 'datetime-local', value: n.remindAt ? toLocalInput(n.remindAt) : '', onchange: (e) => setReminder(n.id, e.target.value).then(renderEditor) }),
+      ),
+      h('label', {}, h('span', {}, 'Avisarme'),
+        h('select', {
+          onchange: async (e) => {
+            await patchNote(n.id, (x) => {
+              x.remindBefore = Number(e.target.value)
+              x.reminded = false
+            })
+            renderContent()
+          },
+        }, BEFORE.map(([v, label]) => h('option', { value: v, selected: (Number(n.remindBefore) || 0) === v }, label))),
+      ),
+      h('label', { class: 'wide' }, h('span', {}, 'Enlace de la reunión (opcional)'), linkInput),
+    ),
+    detected
+      ? h('p', { class: 'hint' }, 'Encontré un enlace en la nota: ',
+          h('button', { type: 'button', class: 'linkbtn', onclick: async () => { await patchNote(n.id, (x) => (x.meetingUrl = detected)); await renderEditor() } }, `usar ${meetingLabel(detected)}`))
+      : null,
+    n.remindAt || n.meetingUrl
+      ? h('div', { class: 'row' },
+          joinBtn(n),
+          n.remindAt
+            ? h('button', { type: 'button', class: 'ghost small', title: 'Añadir este recordatorio al calendario del celular', onclick: () => openCalendarDialog(calendarEvents([{ ...n, tasks: [] }])[0]) },
+                h('span', { 'data-icon': 'calendar' }), 'Al calendario')
+            : null,
+        )
+      : null,
+  )
+}
+
 function metaView(n) {
   const projects = [...new Set(state.notes.map((x) => x.project).filter(Boolean))]
   const patch = (key, fn = (v) => v) => (e) =>
@@ -1330,6 +1558,7 @@ function metaView(n) {
   )
 }
 
+const hydrating = new Set()
 async function renderEditor() {
   await flush()
   objectUrls.splice(0).forEach((u) => URL.revokeObjectURL(u))
@@ -1341,6 +1570,17 @@ async function renderEditor() {
   if (!n) {
     el.replaceChildren()
     return
+  }
+  // Synced from another device: fetch its audio/files once, then draw again.
+  if (state.account.mode === 'cloud' && missingBlobs(n) && !hydrating.has(n.id)) {
+    hydrating.add(n.id)
+    hydrate(n.id)
+      .then(async (got) => {
+        if (got) {
+          await refresh()
+        }
+      })
+      .finally(() => hydrating.delete(n.id))
   }
   const s = n.summary
   const fileInput = h('input', { type: 'file', multiple: true, hidden: true, onchange: (e) => (addFiles(n.id, e.target.files), (e.target.value = '')) })
@@ -1396,19 +1636,13 @@ async function renderEditor() {
         : h('button', { type: 'button', class: 'ghost small', title: 'Graba más audio y lo añade a esta misma nota', onclick: () => toggleRecording(n.id) },
             h('span', { 'data-icon': 'mic' }), n.audio ? 'Seguir grabando' : 'Grabar aquí'),
       h('button', { type: 'button', class: 'ghost small', onclick: () => fileInput.click() }, 'Adjuntar'),
-      h('label', { class: 'remind' },
-        h('span', {}, 'Recordarme'),
-        h('input', { type: 'datetime-local', value: n.remindAt ? toLocalInput(n.remindAt) : '', onchange: (e) => setReminder(n.id, e.target.value).then(renderEditor) }),
-      ),
-      n.remindAt
-        ? h('button', { type: 'button', class: 'ghost small', title: 'Añadir este recordatorio al calendario del celular', onclick: () => openCalendarDialog(calendarEvents([{ ...n, tasks: [] }])[0]) },
-            h('span', { 'data-icon': 'calendar' }), 'Al calendario')
-        : null,
+      joinBtn(n),
       h('button', { type: 'button', class: 'ghost small', onclick: (e) => copyText(noteToText(n), e.currentTarget) }, 'Copiar'),
       h('button', { type: 'button', class: 'ghost small', onclick: () => window.print() }, 'PDF'),
       h('button', { type: 'button', class: 'ghost small danger', onclick: () => removeNote(n.id) }, 'Eliminar'),
     ),
     metaView(n),
+    reminderView(n),
     h('section', {},
       h('h3', {}, 'Notas'),
       field(n.body ?? '', saveField(n.id, 'body', (x, v) => (x.body = v)), { placeholder: 'Escriba aquí. Pegue una imagen o suelte archivos para adjuntarlos.', cls: 'body-field' }),
@@ -1426,7 +1660,9 @@ async function renderEditor() {
     isStructured(s) && s.inferred?.length ? listField(n, 'inferred', 'Inferido (no se dijo explícitamente)', 'inferred') : null,
     n.audio || n.transcript ? transcriptBox : null,
     n.audio ? h('audio', { controls: true, src: (audioUrl = URL.createObjectURL(n.audio)) }) : null,
+    !n.audio && n.audioKey ? h('p', { class: 'hint' }, 'Descargando el audio de la nube…') : null,
     ...(n.audioParts ?? []).map((a, i) => {
+      if (!a.blob) return h('p', { class: 'hint' }, `Continuación ${i + 1}: descargando…`)
       const url = URL.createObjectURL(a.blob)
       objectUrls.push(url)
       return h('div', { class: 'audio-part' }, h('p', { class: 'hint' }, `Continuación ${i + 1} · ${fmtTime(a.at)}`), h('audio', { controls: true, src: url }))
@@ -1499,8 +1735,21 @@ window.addEventListener('appinstalled', () => {
 document.querySelectorAll('.js-install').forEach((b) => (b.onclick = install))
 
 // Launcher shortcuts (long-press the icon on Android, right-click it on desktop).
+async function openNoteRef(ref) {
+  const n = state.notes.find((x) => x.uid === ref || String(x.id) === String(ref))
+  if (n) await goToNote(n)
+}
+navigator.serviceWorker?.addEventListener('message', (e) => {
+  if (e.data?.type === 'open-note' && e.data.uid) openNoteRef(e.data.uid)
+})
+
 async function runLaunchAction() {
   const params = new URLSearchParams(location.search)
+  const noteRef = params.get('note')
+  if (noteRef) {
+    history.replaceState(null, '', location.pathname)
+    return openNoteRef(noteRef)
+  }
   const action = params.get('action')
   if (!action) return
   history.replaceState(null, '', location.pathname)
@@ -1526,7 +1775,116 @@ document.addEventListener('keydown', (e) => {
 setInterval(checkReminders, 20000)
 document.addEventListener('visibilitychange', () => !document.hidden && checkReminders())
 
+// ---------- account + sync ----------
+const SYNC_TEXT = {
+  idle: '',
+  syncing: 'Sincronizando…',
+  ok: 'Sincronizado',
+  offline: 'Sin conexión: se subirá al volver',
+  error: 'Error al sincronizar',
+  auth: 'Sesión expirada',
+}
+function paintSync(s = syncStatus()) {
+  document.querySelectorAll('.js-sync').forEach((el) => {
+    el.textContent = s.detail && s.state !== 'ok' ? `${SYNC_TEXT[s.state]} · ${s.detail}` : SYNC_TEXT[s.state]
+    el.dataset.state = s.state
+  })
+}
+
+function paintAccount() {
+  const u = state.account.user
+  const cloud = state.account.mode === 'cloud'
+  document.querySelectorAll('.js-account').forEach((el) => (el.hidden = !cloud))
+  $('account-box').hidden = !cloud
+  document.querySelector('.js-keys-hint').textContent = cloud
+    ? 'Sus claves se guardan solo en este dispositivo, dentro de su cuenta. Otro usuario de este equipo no las ve.'
+    : 'Las claves se guardan solo en este navegador (IndexedDB).'
+  if (!cloud) return
+  document.querySelectorAll('.js-account-name').forEach((el) => (el.textContent = u.name || u.email))
+  document.querySelectorAll('.js-account-email').forEach((el) => (el.textContent = u.email))
+  document.querySelectorAll('.js-avatar').forEach((img) => {
+    // Only Google's https avatars; otherwise hide the image.
+    if (/^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//i.test(u.picture || '')) img.src = u.picture
+    else img.hidden = true
+  })
+  paintSync()
+}
+
+async function doSignOut() {
+  if (session) return setStatus('Detenga la grabación antes de cerrar sesión.')
+  await flush()
+  const pending = await unsyncedCount()
+  const ask = pending
+    ? `Hay ${pending} cambio${pending > 1 ? 's' : ''} que aún no se ${pending > 1 ? 'subieron' : 'subió'} a la nube. Si cierra sesión ahora se perderán. ¿Cerrar sesión igual?`
+    : '¿Cerrar sesión? Sus notas siguen en su cuenta; de este dispositivo se borra la copia local.'
+  if (!confirm(ask)) return
+  await signOut()
+  // Remove this user's local copy so the next person on this device sees nothing of it.
+  const name = await databaseName()
+  await closeDatabase()
+  await new Promise((r) => {
+    const q = indexedDB.deleteDatabase(name)
+    q.onsuccess = q.onerror = q.onblocked = r
+  })
+  location.reload()
+}
+$('sign-out').onclick = doSignOut
+
+$('delete-account').onclick = async () => {
+  const email = state.account.user?.email ?? ''
+  const typed = prompt(`Esto borra para siempre todas sus notas, audios y archivos de la nube.\nPara confirmar, escriba su correo (${email}):`)
+  if (typed?.trim().toLowerCase() !== email.toLowerCase()) return typed == null ? undefined : setStatus('El correo no coincide; no se borró nada.')
+  try {
+    await deleteAccount()
+  } catch (e) {
+    return setStatus(`No se pudo borrar la cuenta: ${e.message}`)
+  }
+  const name = await databaseName()
+  await closeDatabase()
+  await new Promise((r) => {
+    const q = indexedDB.deleteDatabase(name)
+    q.onsuccess = q.onerror = q.onblocked = r
+  })
+  location.reload()
+}
+$('sync-now').onclick = () => syncNow()
+
+function onAuthLost() {
+  setStatus('Su sesión expiró. Vuelva a iniciar sesión; sus cambios siguen guardados en este dispositivo.', { sticky: true })
+  // Never interrupt a recording or a transcription; reload later to show the sign-in.
+  if (!session && !busy.size) setTimeout(() => location.reload(), 2500)
+}
+
+// A change arrived from another device: refresh lists, but never redraw the note being typed in.
+async function onRemote() {
+  state.notes = (await notes.all()).sort((a, b) => when(b) - when(a))
+  renderContent()
+  if (!$('detail').contains(document.activeElement)) await renderEditor()
+}
+
+async function boot() {
+  let account
+  try {
+    account = await startAccount()
+  } catch (e) {
+    const cached = JSON.parse(localStorage.getItem('notaUser') || 'null')
+    if (!cached) {
+      $('login').hidden = false
+      document.querySelector('.js-login-error').textContent = `No se pudo conectar con el servidor: ${e.message}. Recargue para reintentar.`
+      return
+    }
+    account = { mode: 'cloud', user: cached, offline: true }
+  }
+  state.account = account
+  useDatabase(account.mode === 'cloud' ? `nota-ai-${account.user.sub}` : 'ai-dictation')
+  paintAccount()
+  if (account.mode === 'cloud') startSync({ onRemote, onStatus: paintSync, onAuthLost })
+  await refresh()
+  await checkReminders()
+  await runLaunchAction()
+}
+
 paintIcons()
 requestPersistence()
 paintInstall()
-refresh().then(checkReminders).then(runLaunchAction)
+boot()

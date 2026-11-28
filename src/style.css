@@ -730,3 +730,41 @@ body.cloud #settings-btn { display: none; }
 .side-foot .account-chip { border: 1px solid var(--border); padding: 8px 10px; color: var(--fg); }
 .side-foot .account-chip:hover { background: var(--hover); }
 .account-chip img, .card.who img.ava { background: linear-gradient(135deg, #c9c3ff, #8fd3c0); }
+
+/* ---------- update bar + what's new ---------- */
+.upd-bar { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 46; display: flex; align-items: center; gap: 12px; width: min(94vw, 560px); padding: 10px 10px 10px 16px; border-radius: 14px; background: var(--ink); color: var(--on-ink); box-shadow: var(--shadow); animation: rise 0.25s ease-out; font-size: 14px; }
+.upd-bar .soft { opacity: 0.7; }
+.upd-bar .grow { min-width: 0; }
+.upd-bar button { background: color-mix(in srgb, var(--on-ink) 12%, transparent); color: var(--on-ink); }
+.upd-bar button.go { background: var(--accent); color: var(--on-accent); }
+.dot-rec { width: 10px; height: 10px; border-radius: 50%; background: var(--rec); flex: none; animation: pulse 1.4s ease-in-out infinite; }
+.whatsnew { width: min(92vw, 440px); display: grid; gap: 12px; }
+.whatsnew[open] { display: grid; }
+.whatsnew .chip { justify-self: start; }
+.whatsnew h2 { margin: 0; }
+.whatsnew ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.whatsnew li { display: flex; gap: 9px; }
+.whatsnew li::before { content: '✦'; color: var(--accent); }
+
+/* ---------- phone: "¿Qué quiere grabar?" sheet ---------- */
+dialog.sheet { margin: auto 0 0; width: 100%; max-width: 100%; border-radius: 24px 24px 0 0; border: 0; padding: 10px 18px calc(22px + env(safe-area-inset-bottom)); animation: sheet-up 0.22s ease-out; }
+dialog.sheet[open] { display: grid; gap: 10px; }
+dialog.sheet h2 { margin: 0; font-size: 21px; }
+dialog.sheet .grab { width: 40px; height: 5px; border-radius: 9px; background: var(--border); justify-self: center; margin-bottom: 6px; }
+dialog.sheet .hint.small { font-size: 12.5px; }
+.opts { display: grid; gap: 10px; margin-top: 4px; }
+.opt { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 14px; border: 1.5px solid var(--border); background: transparent; color: var(--fg); text-align: left; font-weight: 400; }
+.opt:hover { filter: none; background: var(--hover); }
+.opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.opt .oi { width: 40px; height: 40px; border-radius: 12px; background: var(--hover); display: grid; place-items: center; flex: none; color: var(--muted); }
+.opt.on .oi { background: var(--surface); color: var(--accent); }
+.opt .t { display: grid; flex: 1; min-width: 0; }
+.opt .t b { font-weight: 700; }
+.opt .t small { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opt .radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); flex: none; }
+.opt.on .radio { border: 6px solid var(--accent); }
+dialog.sheet .start { height: 54px; border-radius: 14px; font-size: 16px; margin-top: 4px; }
+dialog.sheet .start .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--rec); }
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } }
+@media (max-width: 800px) { .upd-bar { bottom: calc(92px + env(safe-area-inset-bottom)); } }
+@media (prefers-reduced-motion: reduce) { .upd-bar, dialog.sheet, .dot-rec { animation: none !important; } }

@@ -1,4 +1,5 @@
 import './style.css'
+import { registerSW } from 'virtual:pwa-register'
 import { notes, settings, requestPersistence, update as updateNote, useDatabase, closeDatabase, databaseName } from './db.js'
 import { pushSupported, pushState, enablePush, disablePush, testPush, startAccount, signOut, deleteAccount, startSync, syncNow, syncStatus, unsyncedCount, hydrate, missingBlobs, calendarFeed, usage } from './cloud.js'
 import { startRecording, SOURCES } from './recorder.js'
@@ -1252,17 +1253,83 @@ async function loadSettings() {
 }
 
 const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0'
+// ---------- updates ----------
+// A new version waits until the user says so, and never while recording or processing.
 let updateReady = false
-let updateSW = null // set by the service worker registration (phase 5 wires the prompt)
+let updateDismissed = false
+let swReg = null
+const updateSW = registerSW({
+  onNeedRefresh() {
+    updateReady = true
+    paintUpdate()
+    if (state.view === 'profile') renderContent()
+  },
+  onRegisteredSW(_url, reg) {
+    swReg = reg
+    // Look for a new version every hour and whenever the app comes back to the front.
+    if (reg) setInterval(() => reg.update().catch(() => {}), 3600e3)
+  },
+})
+document.addEventListener('visibilitychange', () => !document.hidden && swReg?.update().catch(() => {}))
+
 async function checkForUpdate() {
-  const reg = await navigator.serviceWorker?.getRegistration()
-  if (!reg) return setStatus('La app está al día.')
-  await reg.update()
-  setStatus(reg.waiting || reg.installing ? 'Descargando la versión nueva…' : 'La app está al día.')
+  if (!swReg) return setStatus('La app está al día.')
+  setStatus('Buscando actualización…')
+  await swReg.update().catch(() => {})
+  setTimeout(() => !updateReady && setStatus('La app está al día.'), 1500)
 }
 function applyUpdate() {
-  if (updateSW) updateSW(true)
-  else location.reload()
+  if (session || busy.size) {
+    updateDismissed = false
+    return paintUpdate()
+  }
+  localStorage.setItem('seenVersion', APP_VERSION)
+  updateSW(true)
+}
+
+function paintUpdate() {
+  document.querySelector('.upd-bar')?.remove()
+  if (!updateReady || updateDismissed) return
+  const recording = !!session || busy.size > 0
+  const bar = h('div', { class: 'upd-bar', role: 'status' },
+    recording ? h('span', { class: 'dot-rec' }) : ico('sparkles'),
+    h('span', { class: 'grow' },
+      h('b', {}, recording ? 'Actualización lista.' : 'Hay una versión nueva.'),
+      ' ',
+      h('span', { class: 'soft' }, recording ? 'Se instala al terminar de grabar.' : 'Se instala en un segundo.'),
+    ),
+    recording
+      ? h('button', { type: 'button', class: 'small', onclick: () => ((updateDismissed = true), paintUpdate()) }, 'Entendido')
+      : [
+          h('button', { type: 'button', class: 'small', onclick: () => ((updateDismissed = true), paintUpdate()) }, 'Más tarde'),
+          h('button', { type: 'button', class: 'small go', onclick: applyUpdate }, 'Actualizar'),
+        ],
+  )
+  document.body.append(bar)
+}
+
+// After an update: a short "what's new" card, once per version.
+const CHANGES = {
+  '0.2.0': [
+    'Nuevo nombre: Quedamos.',
+    'Diseño nuevo, con modo oscuro.',
+    'Añadir al calendario con un toque, desde la nota o desde cada pendiente.',
+    'Perfil con sus ajustes, claves de IA y espacio usado.',
+  ],
+}
+function showWhatsNew() {
+  const seen = localStorage.getItem('seenVersion')
+  localStorage.setItem('seenVersion', APP_VERSION)
+  if (!seen || seen === APP_VERSION || !CHANGES[APP_VERSION]) return
+  const d = h('dialog', { class: 'whatsnew' },
+    h('span', { class: 'chip theme' }, `Novedades · ${APP_VERSION}`),
+    h('h2', {}, 'Quedamos se actualizó'),
+    h('ul', {}, CHANGES[APP_VERSION].map((c) => h('li', {}, c))),
+    h('div', { class: 'row end' }, h('button', { type: 'button', onclick: () => d.close() }, 'Listo')),
+  )
+  d.onclose = () => d.remove()
+  document.body.append(d)
+  d.showModal()
 }
 
 // Settings live in the Perfil screen (state.view = 'profile'); every field saves on change.
@@ -1347,6 +1414,7 @@ function paintRecording(recording) {
   document.querySelectorAll('.js-src-btn').forEach((s) => (s.disabled = recording))
   if (recording) closeSourceMenu()
   if (!recording) document.querySelectorAll('.js-timer').forEach((t) => (t.textContent = ''))
+  if (updateReady && !updateDismissed) paintUpdate()
 }
 
 // The timer only counts recorded time, so pauses do not add up.
@@ -1503,7 +1571,43 @@ async function saveSegment(rec, blob, { background = false } = {}) {
   // While still recording, transcribe the finished pieces in the background: less to wait at the end.
   if (background) transcribePending(rec.id).catch(() => {})
 }
-document.querySelectorAll('.js-record').forEach((b) => (b.onclick = () => toggleRecording()))
+document.querySelectorAll('.js-record').forEach((b) => (b.onclick = () => (!session && b.classList.contains('fab') ? openRecordSheet() : toggleRecording())))
+
+// Phone: tapping record asks what to record (new note or keep adding to one).
+function openRecordSheet() {
+  const open = openNote()
+  const today = todayKey()
+  const target = open ?? state.notes.find((n) => (n.audio || n.audioKey) && dayKey(when(n)) === today)
+  let choice = open ? 'continue' : 'new'
+  const opt = (key, icon, title, hint) => {
+    const b = h('button', { type: 'button', role: 'radio', class: `opt ${choice === key ? 'on' : ''}`, 'aria-checked': String(choice === key), onclick: () => {
+      choice = key
+      sheet.querySelectorAll('.opt').forEach((o) => {
+        o.classList.toggle('on', o === b)
+        o.setAttribute('aria-checked', String(o === b))
+      })
+    } }, h('span', { class: 'oi' }, ico(icon)), h('span', { class: 't' }, h('b', {}, title), h('small', {}, hint)), h('span', { class: 'radio' }))
+    return b
+  }
+  const sheet = h('dialog', { class: 'sheet' },
+    h('div', { class: 'grab' }),
+    h('h2', {}, '¿Qué quiere grabar?'),
+    h('p', { class: 'hint' }, 'Se guarda solo cada 15 minutos.'),
+    h('div', { class: 'opts', role: 'radiogroup' },
+      opt('new', 'mic', 'Nota nueva', 'Con el micrófono del teléfono'),
+      target ? opt('continue', 'notes', 'Seguir en una nota', `Añadir a "${noteTitle(target)}"`) : null,
+    ),
+    h('p', { class: 'hint small' }, 'Para grabar Zoom o Meet con el audio de los demás, use la app de computadora.'),
+    h('button', { type: 'button', class: 'ink start', onclick: () => {
+      sheet.close()
+      toggleRecording(choice === 'continue' && target ? target.id : null)
+    } }, h('span', { class: 'dot' }), 'Empezar a grabar'),
+  )
+  sheet.onclose = () => sheet.remove()
+  sheet.onclick = (e) => e.target === sheet && sheet.close() // tap outside closes
+  document.body.append(sheet)
+  sheet.showModal()
+}
 
 async function finishRecording() {
   clearInterval(timerId)
@@ -1511,6 +1615,7 @@ async function finishRecording() {
   const blob = await session.stop()
   session = null
   paintRecording(false)
+  if (updateReady) ((updateDismissed = false), paintUpdate())
 
   // Save the audio first: if the APIs fail we never lose the recording.
   if (blob.size) await saveSegment(rec, blob)
@@ -1673,6 +1778,7 @@ async function processNote(id) {
     busy.delete(id)
     uiHooks.delete(id)
   }
+  if (updateReady && !busy.size && !session) paintUpdate()
   await refresh()
 }
 
@@ -2347,6 +2453,7 @@ async function boot() {
   await refresh()
   await checkReminders()
   await runLaunchAction()
+  showWhatsNew()
 }
 
 paintIcons()

@@ -43,6 +43,7 @@ const ICONS = {
   plus: '<path d="M5 12h14M12 5v14"/>',
   sliders: '<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>',
   back: '<path d="m12 19-7-7 7-7M19 12H5"/>',
+  next: '<path d="m12 5 7 7-7 7M5 12h14"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
   mix: '<rect x="2" y="5" width="13" height="9" rx="2"/><path d="M6 18h5"/><rect x="16" y="8" width="5" height="9" rx="2.5"/><path d="M18.5 19v2"/>',
@@ -249,20 +250,22 @@ function noteRow(n, { day = null } = {}) {
   const reminderToday = day && n.remindAt && dayKey(n.remindAt) === day
   const dueToday = day ? dueOn(n, day).length : 0
   const here = !day || dayKey(when(n)) === day
+  const tags = [
+    themeOf(n) ? h('span', { class: 'chip theme' }, themeOf(n)) : null,
+    n.type && n.type !== 'note' ? h('span', { class: 'chip plain' }, typeLabel(n.type)) : null,
+    n.project ? h('span', { class: 'chip plain' }, n.project) : null,
+    n.attachments?.length ? h('span', { class: 'chip plain' }, `${n.attachments.length} archivo${n.attachments.length > 1 ? 's' : ''}`) : null,
+    reminderToday ? h('span', { class: 'chip plain' }, `🔔 ${fmtTime(n.remindAt)}`) : null,
+    dueToday ? h('span', { class: 'badge' }, `${dueToday} vence${dueToday > 1 ? 'n' : ''} hoy`) : null,
+    pend && !dueToday ? h('span', { class: 'badge' }, `${pend} pendiente${pend > 1 ? 's' : ''}`) : null,
+  ].filter(Boolean)
   return h('li', {},
     h('button', { type: 'button', class: `note ${n.id === state.openId ? 'active' : ''}`, onclick: () => goToNote(n) },
-      h('span', { class: 'time' }, here ? fmtTime(when(n)) : fmtShort(when(n))),
       h('span', { class: 'body' },
-        h('strong', {}, noteTitle(n)),
+        h('span', { class: 'note-t' }, h('strong', {}, noteTitle(n)), h('span', { class: 'time' }, here ? fmtTime(when(n)) : fmtShort(when(n)))),
         snippet ? h('span', { class: 'snippet' }, snippet) : null,
+        tags.length ? h('span', { class: 'tags' }, tags) : null,
       ),
-      themeOf(n) ? h('span', { class: 'chip theme' }, themeOf(n)) : null,
-      n.type && n.type !== 'note' ? h('span', { class: 'chip' }, typeLabel(n.type)) : null,
-      n.project ? h('span', { class: 'chip' }, n.project) : null,
-      n.attachments?.length ? h('span', { class: 'chip' }, `${n.attachments.length} archivo${n.attachments.length > 1 ? 's' : ''}`) : null,
-      reminderToday ? h('span', { class: 'chip' }, `Recordatorio ${fmtTime(n.remindAt)}`) : null,
-      dueToday ? h('span', { class: 'badge' }, `${dueToday} vence${dueToday > 1 ? 'n' : ''}`) : null,
-      pend && !dueToday ? h('span', { class: 'badge' }, `${pend} pendiente${pend > 1 ? 's' : ''}`) : null,
       pinBtn(n),
     ),
   )
@@ -425,18 +428,21 @@ function upcomingCard() {
     .sort((a, b) => a.remindAt - b.remindAt)
     .slice(0, 3)
   if (!soon.length) return null
-  return card('Próximo',
-    h('ul', { class: 'plain' },
-      soon.map((n) =>
-        h('li', { class: 'task' },
-          h('button', { type: 'button', class: 'link grow', onclick: () => goToNote(n) },
-            h('span', {}, noteTitle(n)),
-            h('small', {}, `${dayKey(n.remindAt) === todayKey() ? 'Hoy' : fmtShort(n.remindAt)} · ${fmtTime(n.remindAt)}`),
-          ),
-          joinBtn(n),
-        ),
+  const [first, ...rest] = soon
+  const mins = Math.round((first.remindAt - now) / 60000)
+  const inText = mins <= 0 ? 'es ahora' : mins < 60 ? `en ${mins} min` : `en ${Math.round(mins / 60)} h`
+  const link = safeMeetingUrl(first.meetingUrl || '')
+  return h('section', { class: 'card' },
+    h('h3', {}, 'Lo próximo'),
+    h('div', { class: 'next' },
+      h('div', { class: 'when' }, h('b', {}, fmtTime(first.remindAt)), h('small', {}, dayKey(first.remindAt) === todayKey() ? 'Hoy' : dueLabel(dayKey(first.remindAt)))),
+      h('button', { type: 'button', class: 'link what', onclick: () => goToNote(first) },
+        h('span', {}, noteTitle(first)),
+        h('small', {}, [link && meetingLabel(link), inText].filter(Boolean).join(' · ')),
       ),
+      joinBtn(first),
     ),
+    rest.length ? h('ul', { class: 'plain' }, rest.map(reminderRow)) : null,
   )
 }
 
@@ -507,13 +513,41 @@ function calendarCard() {
   )
 }
 
+// Short, human due label: "ayer", "hoy", "mañana", "mié 3".
+function dueLabel(key) {
+  const d = Math.round((keyToDate(key) - keyToDate(todayKey())) / 864e5)
+  if (d === 0) return 'hoy'
+  if (d === -1) return 'ayer'
+  if (d === 1) return 'mañana'
+  if (d > 1 && d < 7) return new Intl.DateTimeFormat(LOCALE, { weekday: 'short', day: 'numeric' }).format(keyToDate(key))
+  return fmtShort(keyToDate(key))
+}
+
 function taskRow({ n, t, i }) {
   const today = todayKey()
-  const meta = [n.title || noteTitle(n), t.owner, t.dueDate ? `vence ${fmtShort(keyToDate(t.dueDate))}` : null].filter(Boolean).join(' · ')
-  return h('li', { class: `task ${!t.done && t.dueDate && t.dueDate < today ? 'overdue' : ''} ${t.done ? 'done' : ''}` },
+  const late = !t.done && t.dueDate && t.dueDate < today
+  const meta = [n.title || noteTitle(n), t.owner].filter(Boolean).join(' · ')
+  return h('li', { class: `task item ${late ? 'overdue' : ''} ${t.done ? 'done' : ''}` },
     h('input', { type: 'checkbox', checked: t.done, 'aria-label': 'Marcar como hecho', onchange: (e) => toggleTask(n.id, i, e.target.checked) }),
     h('button', { type: 'button', class: 'link grow', onclick: () => goToNote(n) }, h('span', {}, t.text), h('small', {}, meta)),
-    !t.done && t.dueDate ? calBtn(calendarEvents([{ ...n, remindAt: null, tasks: [t] }])[0]) : null,
+    !t.done && t.dueDate ? h('span', { class: 'hover-act' }, calQuick(calendarEvents([{ ...n, remindAt: null, tasks: [t] }])[0], { label: false })) : null,
+    !t.done && t.dueDate ? h('span', { class: `chip ${late || t.dueDate === today ? 'due' : 'plain'}` }, dueLabel(t.dueDate)) : null,
+  )
+}
+
+// A reminder as a row: bell, title, time + link, "Unirse" and one-tap calendar.
+function reminderRow(n) {
+  const link = safeMeetingUrl(n.meetingUrl || '')
+  const before = Number(n.remindBefore) ? ` · aviso ${BEFORE.find(([v]) => v === Number(n.remindBefore))?.[1] ?? `${n.remindBefore} min antes`}` : ''
+  return h('li', { class: `task item reminder ${n.remindAt < Date.now() - 2 * 3600e3 ? 'past' : ''}` },
+    ico('bell'),
+    h('button', { type: 'button', class: 'link grow', onclick: () => goToNote(n) },
+      h('span', {}, noteTitle(n)),
+      h('small', {}, `${link ? meetingLabel(link) : 'Recordatorio'}${before}`),
+    ),
+    n.remindAt > Date.now() - 2 * 3600e3 ? joinBtn(n) : null,
+    h('span', { class: 'hover-act' }, calQuick(calendarEvents([{ ...n, tasks: [] }])[0], { label: false })),
+    h('span', { class: 'chip plain' }, dayKey(n.remindAt) === todayKey() ? fmtTime(n.remindAt) : `${dueLabel(dayKey(n.remindAt))} ${fmtTime(n.remindAt)}`),
   )
 }
 
@@ -545,41 +579,46 @@ function homeView() {
   const greet = now.getHours() < 12 ? 'Buenos días' : now.getHours() < 19 ? 'Buenas tardes' : 'Buenas noches'
   const today = todayKey()
 
-  const quick = field(state.quick, (v) => (state.quick = v), { placeholder: 'Anote algo ahora, organícelo después…', cls: 'quick-field' })
-  quick.onkeydown = (e) => {
-    // Block body on purpose: a DOM0 handler that returns false cancels the keystroke.
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') saveQuick()
-  }
+  // One line: Enter saves (Shift+Enter would need the full note anyway).
+  const quick = h('input', {
+    class: 'quick-input',
+    value: state.quick,
+    placeholder: 'Anote algo rápido…', title: 'Enter para guardar',
+    'aria-label': 'Nota rápida',
+    oninput: (e) => (state.quick = e.target.value),
+    onkeydown: (e) => e.key === 'Enter' && (e.preventDefault(), saveQuick()),
+  })
 
   const pending = allPending()
   const urgent = pending.filter((x) => x.t.dueDate && x.t.dueDate <= today)
-  const shown = (urgent.length ? urgent : pending).slice(0, 6)
+  const shown = (urgent.length ? urgent : pending).slice(0, 5)
+  // Each note appears once on this screen: "Lo próximo" first, then Recientes, then Fijadas.
+  const upcoming = upcomingCard()
+  const taken = new Set(state.notes.filter((n) => n.remindAt && n.remindAt > Date.now() - 30 * 60000 && n.remindAt < Date.now() + 24 * 3600000).slice(0, 3).map((n) => n.id))
+  const recent = state.notes.filter((n) => !taken.has(n.id)).slice(0, 5)
+  recent.forEach((n) => taken.add(n.id))
+  const pinned = state.notes.filter((n) => n.pinned && !taken.has(n.id))
 
-  return h('div', { class: 'view' },
+  return h('div', { class: 'view home' },
     pageHead(`${greet}${firstName() ? `, ${firstName()}` : ''}.`, fmtDay(today)),
-    upcomingCard(),
-    h('section', { class: 'card quick' },
-      quick,
-      h('div', { class: 'row end' },
-        h('span', { class: 'hint' }, 'Ctrl/⌘ + Enter para guardar'),
-        h('button', { type: 'button', class: 'small', onclick: saveQuick }, 'Guardar'),
+    h('div', { class: 'home-grid' },
+      h('div', { class: 'col' },
+        upcoming,
+        h('section', { class: 'card quick-line' }, ico('edit'), quick, h('button', { type: 'button', class: 'ink small', onclick: saveQuick }, 'Guardar')),
+        card('Recientes', noteList(recent, {}, 'Aún no hay notas. Grabe una reunión o escriba una.'), linkBtn('Todas las notas', () => navigate('notes'))),
       ),
-    ),
-    h('div', { class: 'grid2' },
-      card('Hoy', noteList(notesOfDay(today), { day: today }, 'Aún no hay registros hoy.')),
-      card(
-        urgent.length ? 'Requiere atención' : 'Pendientes',
-        h('ul', { class: 'plain' }, shown.length ? shown.map(taskRow) : [h('li', { class: 'empty' }, 'Todo al día. No hay pendientes.')]),
-        pending.length > shown.length ? linkBtn('Ver todos', () => navigate('pending')) : null,
+      h('div', { class: 'col' },
+        card(
+          urgent.length ? `Requiere atención · ${urgent.length}` : 'Pendientes',
+          h('ul', { class: 'plain' }, shown.length ? shown.map(taskRow) : [h('li', { class: 'empty' }, 'Todo al día. No hay pendientes.')]),
+          pending.length > shown.length ? linkBtn('Ver todos', () => navigate('pending')) : null,
+        ),
+        pinned.length ? card('Fijadas', noteList(pinned, {}, ''), linkBtn('Ver fijadas', () => ((state.filterCategory = '*'), navigate('notes')))) : null,
+        h('div', { class: 'row' },
+          h('button', { type: 'button', class: 'quiet small', onclick: () => openDigest('day') }, ico('notes'), 'Resumen de hoy'),
+          h('button', { type: 'button', class: 'quiet small', onclick: () => openDigest('week') }, 'Resumen de la semana'),
+        ),
       ),
-    ),
-    state.notes.some((n) => n.pinned)
-      ? card('Fijadas', noteList(state.notes.filter((n) => n.pinned), {}, ''), linkBtn('Ver fijadas', () => ((state.filterCategory = '*'), navigate('notes'))))
-      : null,
-    card('Recientes', noteList(state.notes.slice(0, 5), {}, 'Aún no hay notas. Grabe una reunión o escriba una.'), linkBtn('Todas las notas', () => navigate('notes'))),
-    h('div', { class: 'row' },
-      h('button', { type: 'button', class: 'ghost small', onclick: () => openDigest('day') }, 'Resumen de hoy'),
-      h('button', { type: 'button', class: 'ghost small', onclick: () => openDigest('week') }, 'Resumen de la semana'),
     ),
   )
 }
@@ -629,30 +668,23 @@ function notesView() {
         ),
       ),
       h('button', { type: 'button', onclick: () => createNote() }, 'Nueva nota')),
-    h('div', { class: 'filters' },
-      h('div', { class: 'chips' },
-        chip('Todos los temas', !fc, () => ((state.filterCategory = ''), renderContent())),
-        state.notes.some((n) => n.pinned) || fc === '*' ? chip('★ Fijadas', fc === '*', () => ((state.filterCategory = '*'), renderContent())) : null,
-        themes.map((t) => chip(t, fc === t, () => ((state.filterCategory = t), renderContent()))),
-        themes.length && state.notes.some((n) => !themeOf(n)) ? chip(NO_THEME, fc === NO_THEME, () => ((state.filterCategory = NO_THEME), renderContent())) : null,
-      ),
+    // One row of filters: themes as chips, type and project as compact selects.
+    h('div', { class: 'chips filter-row' },
+      chip('Todas', !fc, () => ((state.filterCategory = ''), renderContent())),
+      state.notes.some((n) => n.pinned) || fc === '*' ? chip('★ Fijadas', fc === '*', () => ((state.filterCategory = '*'), renderContent())) : null,
+      themes.map((t) => chip(t, fc === t, () => ((state.filterCategory = t), renderContent()))),
+      themes.length && state.notes.some((n) => !themeOf(n)) ? chip(NO_THEME, fc === NO_THEME, () => ((state.filterCategory = NO_THEME), renderContent())) : null,
+      typesInUse.length > 1
+        ? h('select', { class: `fselect ${state.filterType !== 'all' ? 'on' : ''}`, 'aria-label': 'Tipo', onchange: (e) => ((state.filterType = e.target.value), renderContent()) },
+            h('option', { value: 'all' }, 'Tipo: todos'),
+            typesInUse.map((t) => h('option', { value: t.id, selected: state.filterType === t.id }, t.label)))
+        : null,
+      projects.length
+        ? h('select', { class: `fselect ${state.filterProject ? 'on' : ''}`, 'aria-label': 'Proyecto', onchange: (e) => ((state.filterProject = e.target.value), renderContent()) },
+            h('option', { value: '' }, 'Proyecto: todos'),
+            projects.map((p) => h('option', { value: p, selected: state.filterProject === p }, p)))
+        : null,
     ),
-    typesInUse.length > 1 || projects.length
-      ? h('div', { class: 'filters' },
-          typesInUse.length > 1
-            ? h('div', { class: 'chips' },
-                chip('Todas', state.filterType === 'all', () => ((state.filterType = 'all'), renderContent())),
-                typesInUse.map((t) => chip(t.label, state.filterType === t.id, () => ((state.filterType = t.id), renderContent()))),
-              )
-            : null,
-          projects.length
-            ? h('div', { class: 'chips' },
-                chip('Cualquier proyecto', !state.filterProject, () => ((state.filterProject = ''), renderContent())),
-                projects.map((p) => chip(p, state.filterProject === p, () => ((state.filterProject = p), renderContent()))),
-              )
-            : null,
-        )
-      : null,
     list.length
       ? [
           pinned.length ? h('section', { class: 'group' }, h('h3', {}, '★ Fijadas'), noteList(pinned, {})) : null,
@@ -663,49 +695,96 @@ function notesView() {
 }
 
 // ---------- Calendar ----------
-function calendarGrid() {
+// What happens on each day: reminders (with time), tasks due, and how many notes were taken.
+function dayEvents() {
+  const byDay = new Map()
+  const entry = (k) => byDay.get(k) ?? byDay.set(k, { notes: [], reminders: [], due: [] }).get(k)
+  for (const n of state.notes) {
+    entry(dayKey(when(n))).notes.push(n)
+    if (n.remindAt) entry(dayKey(n.remindAt)).reminders.push(n)
+    n.tasks?.forEach((t, i) => !t.done && t.dueDate && entry(t.dueDate).due.push({ n, t, i }))
+  }
+  for (const e of byDay.values()) e.reminders.sort((a, b) => a.remindAt - b.remindAt)
+  return byDay
+}
+
+function calendarGrid(byDay) {
   const y = state.month.getFullYear()
   const m = state.month.getMonth()
-
-  const byDay = new Map()
-  const entry = (k) => byDay.get(k) ?? byDay.set(k, { notes: 0, pending: 0, reminder: false, due: false }).get(k)
-  for (const n of state.notes) {
-    const e = entry(dayKey(when(n)))
-    e.notes++
-    e.pending += pendingOf(n).length
-    if (n.remindAt) entry(dayKey(n.remindAt)).reminder = true
-    for (const t of pendingOf(n)) if (t.dueDate) entry(t.dueDate).due = true
-  }
-
   const today = todayKey()
   const lead = (new Date(y, m, 1).getDay() + 6) % 7 // Monday first
   const total = new Date(y, m + 1, 0).getDate()
+  const weeks = Math.ceil((lead + total) / 7)
 
   const cells = []
   for (let i = 0; i < 7; i++) {
     cells.push(h('span', { class: 'wd' }, new Intl.DateTimeFormat(LOCALE, { weekday: 'short' }).format(new Date(2026, 0, 5 + i))))
   }
-  for (let i = 0; i < lead; i++) cells.push(h('span'))
-  for (let d = 1; d <= total; d++) {
-    const key = dayKey(new Date(y, m, d))
+  for (let c = 0; c < weeks * 7; c++) {
+    const d = new Date(y, m, c - lead + 1)
+    const key = dayKey(d)
     const info = byDay.get(key)
+    const labels = [
+      ...(info?.reminders ?? []).map((n) => h('span', { class: 'ev meet' }, `${fmtTime(n.remindAt)} ${noteTitle(n)}`)),
+      ...(info?.due ?? []).map((x) => h('span', { class: `ev ${key < today ? 'due' : 'task'}` }, x.t.text)),
+    ]
     cells.push(
       h('button', {
         type: 'button',
-        class: ['day', key === today && 'today', key === state.selected && 'selected'].filter(Boolean).join(' '),
+        class: ['day', d.getMonth() !== m && 'out', key === today && 'today', key === state.selected && 'selected'].filter(Boolean).join(' '),
         'aria-label': fmtDay(key),
-        onclick: () => ((state.selected = key), renderContent()),
+        onclick: () => {
+          state.selected = key
+          if (d.getMonth() !== m) state.month = new Date(d.getFullYear(), d.getMonth(), 1)
+          renderContent()
+        },
       },
-        h('span', { class: 'num' }, String(d)),
+        h('span', { class: 'num' }, String(d.getDate())),
+        h('span', { class: 'evs' }, labels.slice(0, 2), labels.length > 2 ? h('span', { class: 'ev more' }, `+${labels.length - 2}`) : null),
         h('span', { class: 'dots' },
-          info?.notes ? h('i', { class: 'd-note' }) : null,
-          info?.due ? h('i', { class: 'd-due' }) : info?.pending ? h('i', { class: 'd-pending' }) : null,
-          info?.reminder ? h('i', { class: 'd-remind' }) : null,
+          info?.notes.length ? h('i', { class: 'd-note' }) : null,
+          info?.reminders.length ? h('i', { class: 'd-remind' }) : null,
+          info?.due.length ? h('i', { class: key < today ? 'd-due' : 'd-pending' }) : null,
         ),
       ),
     )
   }
-  return h('div', { class: 'cal-grid' }, cells)
+  return h('div', { class: 'cal-grid', style: `grid-template-rows: auto repeat(${weeks}, 1fr)` }, cells)
+}
+
+// The selected day as a timeline: notes and reminders by hour, a red line at "now" for today.
+function agenda(key, info) {
+  const items = [
+    ...(info?.notes ?? []).map((n) => ({ at: when(n), kind: 'note', n })),
+    ...(info?.reminders ?? []).map((n) => ({ at: n.remindAt, kind: 'remind', n })),
+  ].sort((a, b) => a.at - b.at)
+  const now = Date.now()
+  const isToday = key === todayKey()
+  const rows = []
+  let nowPlaced = !isToday
+  for (const it of items) {
+    if (!nowPlaced && it.at > now) {
+      rows.push(h('li', { class: 'now-line' }, h('time', {}, fmtTime(now))))
+      nowPlaced = true
+    }
+    const link = it.kind === 'remind' ? safeMeetingUrl(it.n.meetingUrl || '') : ''
+    rows.push(
+      h('li', { class: `slot k-${it.kind}` },
+        h('time', {}, fmtTime(it.at)),
+        h('div', { class: 'blk' },
+          h('button', { type: 'button', class: 'link', onclick: () => goToNote(it.n) },
+            h('b', {}, noteTitle(it.n)),
+            h('small', {}, it.kind === 'remind'
+              ? [link ? meetingLabel(link) : 'Recordatorio', Number(it.n.remindBefore) ? `aviso ${fmtTime(it.at - Number(it.n.remindBefore) * 60000)}` : null].filter(Boolean).join(' · ')
+              : [typeLabel(it.n.type), isStructured(it.n.summary) ? 'resumen listo' : it.n.audio ? 'grabada' : null].filter(Boolean).join(' · ')),
+          ),
+          it.kind === 'remind' && it.at > now - 2 * 3600e3 ? h('div', { class: 'row' }, joinBtn(it.n), calQuick(calendarEvents([{ ...it.n, tasks: [] }])[0], { label: false })) : null,
+        ),
+      ),
+    )
+  }
+  if (!nowPlaced && items.length) rows.push(h('li', { class: 'now-line' }, h('time', {}, fmtTime(now))))
+  return h('ul', { class: 'plain timeline' }, rows.length ? rows : [h('li', { class: 'empty' }, 'Nada agendado este día.')])
 }
 
 function calendarView() {
@@ -715,39 +794,37 @@ function calendarView() {
     renderContent()
   }
   const sel = state.selected
-  const dueTasks = state.notes.flatMap((n) => n.tasks?.map((t, i) => ({ n, t, i })).filter((x) => !x.t.done && x.t.dueDate === sel) ?? [])
-  const legend = h('p', { class: 'legend' },
-    h('span', {}, h('i', { class: 'd-note' }), 'Notas'),
-    h('span', {}, h('i', { class: 'd-pending' }), 'Pendientes'),
-    h('span', {}, h('i', { class: 'd-due' }), 'Vencen'),
-    h('span', {}, h('i', { class: 'd-remind' }), 'Recordatorio'),
-  )
+  const byDay = dayEvents()
+  const info = byDay.get(sel)
+  const monthItems = [...byDay].filter(([k]) => k.startsWith(dayKey(state.month).slice(0, 7)))
+  const meetings = monthItems.reduce((a, [, e]) => a + e.reminders.length, 0)
+  const dues = monthItems.reduce((a, [, e]) => a + e.due.length, 0)
+  const navBtn = (icon, label, fn) => {
+    const b = h('button', { type: 'button', class: 'ghost small iconbtn', 'aria-label': label, onclick: fn })
+    b.innerHTML = svg(icon)
+    return b
+  }
+  const counts = [info?.reminders.length && `${info.reminders.length} recordatorio${info.reminders.length > 1 ? 's' : ''}`, info?.due.length && `${info.due.length} pendiente${info.due.length > 1 ? 's' : ''}`, info?.notes.length && `${info.notes.length} nota${info.notes.length > 1 ? 's' : ''}`].filter(Boolean)
 
-  return h('div', { class: 'view' },
-    pageHead('Calendario', 'Vea qué pasó, y qué vence, en cualquier día.'),
+  return h('div', { class: 'view calendar' },
+    pageHead(title.charAt(0).toUpperCase() + title.slice(1),
+      meetings || dues ? `${meetings} recordatorio${meetings === 1 ? '' : 's'} y ${dues} pendiente${dues === 1 ? '' : 's'} este mes` : 'Vea qué pasó, y qué vence, en cualquier día.',
+      navBtn('back', 'Mes anterior', shift(-1)),
+      h('button', { type: 'button', class: 'ghost small', onclick: () => ((state.month = new Date(new Date().getFullYear(), new Date().getMonth(), 1)), (state.selected = todayKey()), renderContent()) }, 'Hoy'),
+      navBtn('next', 'Mes siguiente', shift(1)),
+    ),
     h('div', { class: 'cal-layout' },
-      h('section', { class: 'card' },
+      h('section', { class: 'month' }, calendarGrid(byDay)),
+      h('section', { class: 'card agenda' },
         h('div', { class: 'card-head' },
-          h('h2', { class: 'cap' }, title),
-          h('div', { class: 'row' },
-            h('button', { type: 'button', class: 'ghost small', onclick: shift(-1), 'aria-label': 'Mes anterior' }, '‹'),
-            h('button', { type: 'button', class: 'ghost small', onclick: () => ((state.month = new Date(new Date().getFullYear(), new Date().getMonth(), 1)), (state.selected = todayKey()), renderContent()) }, 'Hoy'),
-            h('button', { type: 'button', class: 'ghost small', onclick: shift(1), 'aria-label': 'Mes siguiente' }, '›'),
-          ),
+          h('div', {}, h('h2', { class: 'cap' }, sel === todayKey() ? `Hoy, ${fmtDay(sel)}` : fmtDay(sel)), h('p', { class: 'hint' }, counts.join(' · ') || 'Día libre')),
+          h('button', { type: 'button', class: 'ghost small', onclick: () => createNote() }, ico('plus'), 'Nota'),
         ),
-        calendarGrid(),
-        legend,
-      ),
-      h('section', { class: 'card' },
-        h('div', { class: 'card-head' },
-          h('h2', { class: 'cap' }, fmtDay(sel)),
-          h('button', { type: 'button', class: 'small', onclick: () => createNote() }, 'Nueva nota'),
-        ),
-        noteList(notesOfDay(sel), { day: sel }, 'No hay nada este día. Use “Nueva nota” para registrar algo.'),
-        dueTasks.length ? h('div', {}, h('h3', {}, 'Vence este día'), h('ul', { class: 'plain' }, dueTasks.map(taskRow))) : null,
+        agenda(sel, info),
+        info?.due.length ? h('div', {}, h('h3', {}, 'Vence este día'), h('ul', { class: 'plain' }, info.due.map(taskRow))) : null,
         h('div', { class: 'row' },
-          h('button', { type: 'button', class: 'ghost small', onclick: () => openDigest('day') }, 'Resumen del día'),
-          h('button', { type: 'button', class: 'ghost small', onclick: () => openDigest('week') }, 'Resumen de la semana'),
+          h('button', { type: 'button', class: 'quiet small', onclick: () => openDigest('day') }, 'Resumen del día'),
+          h('button', { type: 'button', class: 'quiet small', onclick: () => openDigest('week') }, 'Resumen de la semana'),
         ),
       ),
     ),
@@ -776,34 +853,59 @@ function pendingView() {
   const done = state.notes
     .flatMap((n) => n.tasks?.map((t, i) => ({ n, t, i })).filter((x) => x.t.done && x.t.doneAt > weekAgo) ?? [])
     .sort((a, b) => b.t.doneAt - a.t.doneAt)
-  const reminders = state.notes.filter((n) => n.remindAt).sort((a, b) => a.remindAt - b.remindAt)
+  // Reminders from 2 h ago onwards, mixed into the same groups as tasks by their day.
+  const reminders = state.notes.filter((n) => n.remindAt && n.remindAt > Date.now() - 2 * 3600e3).sort((a, b) => a.remindAt - b.remindAt)
+  const remOf = (label) => reminders.filter((n) => {
+    const k = dayKey(n.remindAt)
+    return label === 'Hoy' ? k === today : label === 'Próximos' ? k > today : false
+  })
+  const todayReminders = remOf('Hoy').length
+  const sub = [`${open.length} abierto${open.length === 1 ? '' : 's'}`, todayReminders ? `${todayReminders} recordatorio${todayReminders > 1 ? 's' : ''} hoy` : null].filter(Boolean).join(' · ')
+  const sections = groups.map(([label, test]) => {
+    const tasks = open.filter(test)
+    const rems = remOf(label)
+    const count = tasks.length + rems.length
+    if (!count) return null
+    return h('section', { class: 'group' },
+      h('h3', { class: label === 'Vencidos' ? 'red' : '' }, `${label} · ${count}`),
+      h('ul', { class: 'plain card list' }, rems.map(reminderRow), tasks.map(taskRow)),
+    )
+  })
 
-  return h('div', { class: 'view' },
-    pageHead('Pendientes', 'Compromisos y recordatorios, los más próximos primero.'),
-    pushCard(),
-    calendarCard(),
-    reminders.length
-      ? card('Recordatorios', h('ul', { class: 'plain' },
-          reminders.map((n) =>
-            h('li', { class: `task ${n.remindAt <= Date.now() ? 'overdue' : ''}` },
-              h('button', { type: 'button', class: 'link grow', onclick: () => goToNote(n) },
-                h('span', {}, noteTitle(n)),
-                h('small', {}, `${fmtShort(n.remindAt)} · ${fmtTime(n.remindAt)}${n.remindBefore ? ` · aviso ${BEFORE.find(([v]) => v === Number(n.remindBefore))?.[1] ?? `${n.remindBefore} min antes`}` : ''}`),
-              ),
-              n.remindAt > Date.now() - 2 * 3600000 ? joinBtn(n) : null,
-              calBtn(calendarEvents([{ ...n, tasks: [] }])[0]),
-              h('button', { type: 'button', class: 'x', 'aria-label': 'Quitar recordatorio', onclick: async () => { await setReminder(n.id, ''); await refresh() } }, '×'),
-            ),
-          ),
-        ))
-      : null,
-    open.length
-      ? groups.map(([label, test]) => {
-          const items = open.filter(test)
-          return items.length ? card(`${label} · ${items.length}`, h('ul', { class: 'plain' }, items.map(taskRow))) : null
-        })
-      : h('div', { class: 'card empty-card' }, 'No hay pendientes. Aquí aparecerán los que agregue a una nota o los que encuentre la IA.'),
-    done.length ? h('details', { class: 'card' }, h('summary', {}, `Completados esta semana · ${done.length}`), h('ul', { class: 'plain' }, done.map(taskRow))) : null,
+  return h('div', { class: 'view pending' },
+    pageHead('Pendientes', sub || 'Compromisos y recordatorios, los más próximos primero.'),
+    setupBanner(),
+    sections.some(Boolean)
+      ? sections
+      : h('div', { class: 'card empty-state' }, ico('pending'), h('b', {}, 'Todo al día'), h('span', {}, 'Aquí aparecerán los pendientes que agregue a una nota o los que encuentre la IA.')),
+    done.length ? h('details', { class: 'group done-group' }, h('summary', {}, `Completados esta semana · ${done.length}`), h('ul', { class: 'plain card list' }, done.map(taskRow))) : null,
+    h('details', { class: 'card settings-inline', open: state.showSetup || undefined, ontoggle: (e) => (state.showSetup = e.target.open) },
+      h('summary', {}, 'Avisos y calendario del celular'),
+      pushCard(),
+      calendarCard(),
+    ),
+  )
+}
+
+// A slim nudge until notifications are set up; the full setup sits at the bottom (and in Ajustes).
+function setupBanner() {
+  if (pushStatus === null) refreshPushStatus()
+  if (state.account.mode !== 'cloud' || pushStatus !== 'off' || localStorage.getItem('pushNudge') === 'later') return null
+  return h('div', { class: 'banner' },
+    ico('bell'),
+    h('span', { class: 'grow' }, h('b', {}, 'Active los avisos'), ' para enterarse aunque la app esté cerrada, con botón "Unirse" a la reunión.'),
+    h('button', { type: 'button', class: 'small', onclick: async (e) => {
+      e.currentTarget.disabled = true
+      try {
+        await enablePush()
+        setStatus('Avisos activados.')
+      } catch (err) {
+        setStatus(err.message)
+      }
+      pushStatus = null
+      renderContent()
+    } }, 'Activar'),
+    h('button', { type: 'button', class: 'quiet small', onclick: () => (localStorage.setItem('pushNudge', 'later'), renderContent()) }, 'Ahora no'),
   )
 }
 

@@ -418,6 +418,12 @@ export async function testPush() {
   return (await res.json()).sent
 }
 
+// Cloud space used by this account's audio and files.
+export async function usage() {
+  const res = await check(await api('/usage'))
+  return res.json()
+}
+
 // Private calendar feed (subscribe once in Google Calendar; it refreshes on its own).
 export async function calendarFeed({ reset = false } = {}) {
   const res = await check(await api('/calendar', { method: reset ? 'POST' : 'GET' }))

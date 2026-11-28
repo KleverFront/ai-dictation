@@ -1,5 +1,8 @@
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { readFileSync } from 'node:fs'
+
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
 // BASE_PATH lets the same build run at the domain root or under a sub-path
 // (e.g. GitHub Pages serves the app at /ai-dictation/).
@@ -7,6 +10,7 @@ const base = process.env.BASE_PATH || '/'
 
 export default defineConfig({
   base,
+  define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',

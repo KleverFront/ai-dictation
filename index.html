@@ -108,59 +108,6 @@
     </div>
     <div id="toast" role="status" hidden></div>
 
-    <dialog id="settings">
-      <form method="dialog">
-        <h2>Ajustes</h2>
-        <section id="account-box" class="account-box" hidden>
-          <img class="js-avatar" alt="" referrerpolicy="no-referrer" />
-          <div class="grow">
-            <strong class="js-account-name"></strong>
-            <small class="js-account-email"></small>
-            <small class="js-sync"></small>
-          </div>
-          <div class="row">
-            <button type="button" id="sync-now" class="ghost small">Sincronizar</button>
-            <button type="button" id="sign-out" class="ghost small danger">Cerrar sesión</button>
-          </div>
-          <details class="danger-zone">
-            <summary>Borrar mi cuenta</summary>
-            <p class="hint">Borra de la nube todas sus notas, audios y archivos, y su cuenta. No se puede deshacer. Exporte un respaldo antes si lo quiere conservar.</p>
-            <button type="button" id="delete-account" class="small danger-btn">Borrar mi cuenta y mis datos</button>
-          </details>
-        </section>
-        <label>Clave de API de Groq <input id="groq-key" type="password" autocomplete="off" /></label>
-        <label>Clave de API del LLM <input id="llm-key" type="password" autocomplete="off" /></label>
-        <label>URL base del LLM <input id="llm-url" placeholder="https://api.deepseek.com" /></label>
-        <label>Modelo del LLM <input id="llm-model" placeholder="deepseek-chat" /></label>
-        <label>Idioma de las grabaciones
-          <select id="stt-lang">
-            <option value="es">Español</option>
-            <option value="en">English</option>
-            <option value="pt">Português</option>
-            <option value="auto">Detectar automáticamente</option>
-          </select>
-        </label>
-        <label>Tema
-          <select id="theme-pref">
-            <option value="auto">Automático (como el sistema)</option>
-            <option value="light">Claro</option>
-            <option value="dark">Oscuro</option>
-          </select>
-        </label>
-        <p class="hint js-keys-hint">Las claves se guardan solo en este navegador (IndexedDB).</p>
-        <div class="row">
-          <button type="button" class="ghost js-install" hidden><span data-icon="download"></span>Instalar app</button>
-        </div>
-        <div class="row">
-          <button type="button" id="export-btn" class="ghost">Exportar respaldo</button>
-          <label class="file-btn ghost">Importar respaldo<input id="import-input" type="file" accept="application/json" hidden /></label>
-        </div>
-        <div class="row end">
-          <button value="cancel" class="ghost">Cerrar</button>
-          <button id="save-settings" value="save">Guardar</button>
-        </div>
-      </form>
-    </dialog>
 
     <script type="module" src="/src/main.js"></script>
   </body>

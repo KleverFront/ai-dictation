@@ -1,6 +1,6 @@
 import './style.css'
 import { notes, settings, requestPersistence, update as updateNote, useDatabase, closeDatabase, databaseName } from './db.js'
-import { pushSupported, pushState, enablePush, disablePush, testPush, startAccount, signOut, deleteAccount, startSync, syncNow, syncStatus, unsyncedCount, hydrate, missingBlobs, calendarFeed } from './cloud.js'
+import { pushSupported, pushState, enablePush, disablePush, testPush, startAccount, signOut, deleteAccount, startSync, syncNow, syncStatus, unsyncedCount, hydrate, missingBlobs, calendarFeed, usage } from './cloud.js'
 import { startRecording, SOURCES } from './recorder.js'
 import { transcribe, summarizeChunks, splitForSummary, ask } from './ai.js'
 import { search } from './search.js'
@@ -186,7 +186,7 @@ function renderChrome() {
 }
 
 function renderContent() {
-  const views = { home: homeView, notes: notesView, calendar: calendarView, pending: pendingView, search: searchView, digest: digestView }
+  const views = { home: homeView, notes: notesView, calendar: calendarView, pending: pendingView, search: searchView, digest: digestView, profile: profileView }
   $('content').replaceChildren((views[state.view] ?? homeView)())
 }
 
@@ -879,11 +879,7 @@ function pendingView() {
       ? sections
       : h('div', { class: 'card empty-state' }, ico('pending'), h('b', {}, 'Todo al día'), h('span', {}, 'Aquí aparecerán los pendientes que agregue a una nota o los que encuentre la IA.')),
     done.length ? h('details', { class: 'group done-group' }, h('summary', {}, `Completados esta semana · ${done.length}`), h('ul', { class: 'plain card list' }, done.map(taskRow))) : null,
-    h('details', { class: 'card settings-inline', open: state.showSetup || undefined, ontoggle: (e) => (state.showSetup = e.target.open) },
-      h('summary', {}, 'Avisos y calendario del celular'),
-      pushCard(),
-      calendarCard(),
-    ),
+    h('button', { type: 'button', class: 'quiet small settings-link', onclick: () => openProfile('alerts') }, ico('bell'), 'Avisos y calendario del celular'),
   )
 }
 
@@ -907,6 +903,189 @@ function setupBanner() {
     } }, 'Activar'),
     h('button', { type: 'button', class: 'quiet small', onclick: () => (localStorage.setItem('pushNudge', 'later'), renderContent()) }, 'Ahora no'),
   )
+}
+
+// ---------- Perfil (account + settings) ----------
+const PROFILE_TABS = [
+  ['profile', 'Perfil'],
+  ['recording', 'Grabación e IA'],
+  ['alerts', 'Avisos y calendario'],
+  ['look', 'Apariencia'],
+  ['data', 'Datos y privacidad'],
+  ['about', 'Acerca de'],
+]
+let usageInfo = null
+let settingsCache = null
+const saveSetting = async (key, value) => {
+  await settings.set(key, value)
+  if (settingsCache) settingsCache[key] = value
+}
+const setRow = (title, hint, ...controls) =>
+  h('div', { class: 'set' }, h('div', { class: 'grow' }, h('b', {}, title), hint ? h('small', {}, hint) : null), ...controls)
+const seg = (options, value, onpick) =>
+  h('div', { class: 'seg', role: 'radiogroup' },
+    options.map(([v, label]) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(v === value), class: v === value ? 'on' : '', onclick: () => onpick(v) }, label)))
+
+// Checks a key against the provider's /models endpoint (no tokens spent).
+async function testKey(url, key) {
+  if (!key) return 'missing'
+  try {
+    const r = await fetch(`${url.replace(/\/$/, '')}/models`, { headers: { Authorization: `Bearer ${key}` } })
+    return r.ok ? 'ok' : r.status === 401 || r.status === 403 ? 'bad' : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+const keyState = {}
+function keyField({ key, label, hint, testUrl }) {
+  const st = keyState[key]
+  const input = h('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', value: settingsCache[key] || '', placeholder: 'Pegue su clave aquí', 'aria-label': label,
+    onchange: async (e) => {
+      await saveSetting(key, e.target.value.trim())
+      keyState[key] = 'checking'
+      renderContent()
+      keyState[key] = await testKey(testUrl(), e.target.value.trim())
+      renderContent()
+    } })
+  const badge = st === 'ok' ? h('span', { class: 'chip ok' }, '✓ funciona')
+    : st === 'bad' ? h('span', { class: 'chip due' }, 'Clave inválida')
+    : st === 'checking' ? h('span', { class: 'chip plain' }, h('span', { class: 'spinner' }), 'Probando…')
+    : st === 'unknown' ? h('span', { class: 'chip plain' }, 'Sin verificar')
+    : null
+  const show = h('button', { type: 'button', class: 'quiet small', onclick: (e) => {
+    input.type = input.type === 'password' ? 'text' : 'password'
+    e.currentTarget.textContent = input.type === 'password' ? 'Ver' : 'Ocultar'
+  } }, 'Ver')
+  const test = h('button', { type: 'button', class: 'ghost small', onclick: async () => {
+    keyState[key] = 'checking'
+    renderContent()
+    keyState[key] = await testKey(testUrl(), settingsCache[key])
+    renderContent()
+  } }, 'Probar')
+  return h('div', { class: 'set key-set' }, h('div', { class: 'grow' }, h('b', {}, label), h('small', {}, hint), h('div', { class: 'key-line' }, input, show)), badge, settingsCache[key] ? test : null)
+}
+
+function profileTabBody(tab) {
+  const cloud = state.account.mode === 'cloud'
+  const u = state.account.user
+  const s = settingsCache
+  if (tab === 'profile') {
+    if (cloud && !usageInfo) usage().then((x) => ((usageInfo = x), renderContent())).catch(() => {})
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime()
+    const monthNotes = state.notes.filter((n) => when(n) >= monthStart)
+    const tasks = state.notes.flatMap((n) => n.tasks ?? [])
+    const pct = usageInfo ? Math.min(100, (usageInfo.used / usageInfo.quota) * 100) : 0
+    const avatar = h('img', { class: 'ava', alt: '', referrerpolicy: 'no-referrer' })
+    if (/^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//i.test(u?.picture || '')) avatar.src = u.picture
+    return [
+      h('section', { class: 'card who' },
+        cloud ? avatar : h('span', { class: 'ava' }),
+        h('div', { class: 'grow' },
+          h('b', {}, cloud ? u.name || u.email : 'Sin cuenta'),
+          h('small', {}, cloud ? `${u.email} · entró con Google` : 'Sus notas están solo en este navegador.'),
+        ),
+        cloud ? h('span', { class: 'sync-pill js-sync' }) : null,
+        cloud ? h('button', { type: 'button', class: 'ghost small', onclick: () => syncNow() }, 'Sincronizar') : null,
+      ),
+      h('div', { class: 'stats' },
+        cloud
+          ? h('section', { class: 'card' }, h('h3', {}, 'Espacio en la nube'),
+              h('p', { class: 'big' }, usageInfo ? fmtSize(usageInfo.used) : '…', h('span', {}, usageInfo ? ` de ${Math.round(usageInfo.quota / 1048576 / 1024 * 10) / 10} GB` : '')),
+              h('div', { class: 'meter' }, h('i', { style: `width:${Math.max(pct, usageInfo?.used ? 1 : 0)}%` })),
+              h('small', { class: 'hint' }, 'Audios y archivos adjuntos. El texto casi no ocupa.'))
+          : null,
+        h('section', { class: 'card' }, h('h3', {}, 'Este mes'),
+          h('p', { class: 'big' }, String(monthNotes.length), h('span', {}, ` nota${monthNotes.length === 1 ? '' : 's'}`)),
+          h('small', { class: 'hint' }, `${monthNotes.filter((n) => n.audio || n.audioKey).length} con audio · ${tasks.filter((t) => t.done).length} de ${tasks.length} pendientes completados`)),
+      ),
+    ]
+  }
+  if (tab === 'recording') {
+    const llmUrl = () => settingsCache.llmUrl || 'https://api.deepseek.com'
+    return [
+      h('section', { class: 'card' }, h('h3', {}, 'Grabación'),
+        canCapturePc
+          ? setRow('Qué grabar por defecto', 'También puede cambiarlo junto al botón Grabar.',
+              seg([['mic', 'Micrófono'], ['mix', 'Mixto'], ['pc', 'Solo PC']], recordSource, (v) => { recordSource = v; localStorage.setItem('recordSource', v); paintSource(); renderContent() }))
+          : setRow('Qué grabar', 'En el celular se graba el micrófono. Para Zoom o Meet use la app de computadora.'),
+        setRow('Idioma de las grabaciones', 'Evita que la IA confunda el idioma.',
+          h('select', { onchange: (e) => saveSetting('sttLang', e.target.value) },
+            [['es', 'Español'], ['en', 'English'], ['pt', 'Português'], ['auto', 'Detectar automáticamente']].map(([v, l]) => h('option', { value: v, selected: (s.sttLang || 'es') === v }, l)))),
+      ),
+      h('section', { class: 'card' }, h('h3', {}, 'Inteligencia artificial'),
+        keyField({ key: 'groqKey', label: 'Transcripción · Groq', hint: 'Convierte el audio en texto. Gratis hasta 8 h de audio al día.', testUrl: () => 'https://api.groq.com/openai/v1' }),
+        keyField({ key: 'llmKey', label: 'Resumen · DeepSeek u otro', hint: 'Escribe el resumen, los pendientes y las decisiones.', testUrl: llmUrl }),
+        h('details', { class: 'adv' },
+          h('summary', {}, 'Avanzado: otro proveedor'),
+          setRow('URL del servicio', 'Compatible con la API de OpenAI.', h('input', { value: s.llmUrl || '', placeholder: 'https://api.deepseek.com', onchange: (e) => saveSetting('llmUrl', e.target.value.trim()) })),
+          setRow('Modelo', null, h('input', { value: s.llmModel || '', placeholder: 'deepseek-chat', onchange: (e) => saveSetting('llmModel', e.target.value.trim()) })),
+        ),
+        h('p', { class: 'hint' }, cloud ? 'Sus claves se guardan solo en este dispositivo, dentro de su cuenta. Otro usuario de este equipo no las ve.' : 'Las claves se guardan solo en este navegador.'),
+      ),
+    ]
+  }
+  if (tab === 'alerts') return [pushCard(), calendarCard()]
+  if (tab === 'look') {
+    const cur = localStorage.getItem('theme') || 'auto'
+    return [
+      h('section', { class: 'card' }, h('h3', {}, 'Apariencia'),
+        setRow('Tema', 'Automático sigue al sistema.', seg([['light', 'Claro'], ['dark', 'Oscuro'], ['auto', 'Automático']], cur, (v) => { localStorage.setItem('theme', v); applyTheme(v); renderContent() })),
+      ),
+    ]
+  }
+  if (tab === 'data') {
+    const fileIn = h('input', { type: 'file', accept: 'application/json', hidden: true, onchange: (e) => importBackup(e.target.files[0]).finally(() => (e.target.value = '')) })
+    return [
+      h('section', { class: 'card' }, h('h3', {}, 'Sus datos'),
+        setRow('Exportar todo', 'Notas, pendientes, audios y adjuntos en un archivo.', h('button', { type: 'button', class: 'ghost small', onclick: exportBackup }, ico('download'), 'Descargar copia')),
+        setRow('Importar', 'Desde una copia, por ejemplo de la versión anterior de la app.', fileIn, h('button', { type: 'button', class: 'ghost small', onclick: () => fileIn.click() }, 'Importar…')),
+        !isStandalone() && (installEvent || isIOS()) ? setRow('Instalar la app', 'Ábrala como una app, con su propio ícono.', h('button', { type: 'button', class: 'ghost small', onclick: install }, 'Instalar')) : null,
+      ),
+      cloud
+        ? h('section', { class: 'card' }, h('h3', {}, 'Sesión'),
+            setRow('Cerrar sesión', 'Borra la copia de este dispositivo; sus notas siguen en su cuenta.', h('button', { type: 'button', class: 'ghost small', onclick: doSignOut }, 'Cerrar sesión')))
+        : null,
+      cloud
+        ? h('section', { class: 'card danger-card' },
+            setRow('Eliminar cuenta', 'Borra para siempre sus notas, audios y archivos de la nube. No se puede deshacer.', h('button', { type: 'button', class: 'small danger-btn', onclick: doDeleteAccount }, 'Eliminar…')))
+        : null,
+    ]
+  }
+  // about
+  const site = location.origin.includes('workers.dev') || location.origin.includes('localhost') || location.origin.includes('127.0.0.1') ? '' : 'https://nota-ai.kleverontaneda.workers.dev'
+  return [
+    h('section', { class: 'card who' }, h('span', { class: 'logo big-logo' }, ico('sparkles')), h('div', { class: 'grow' }, h('b', {}, 'Quedamos'), h('small', {}, `Versión ${APP_VERSION}`))),
+    h('section', { class: 'card' }, h('h3', {}, 'Actualizaciones'),
+      setRow(updateReady ? 'Hay una versión nueva' : 'Está al día', updateReady ? 'Se instala al recargar la app.' : 'La app se actualiza sola al abrirla.',
+        updateReady
+          ? h('button', { type: 'button', class: 'small', onclick: applyUpdate }, 'Actualizar ahora')
+          : h('button', { type: 'button', class: 'ghost small', onclick: checkForUpdate }, 'Buscar actualización')),
+    ),
+    h('section', { class: 'card links' },
+      h('a', { href: `${site}/terminos/`, target: '_blank', rel: 'noopener' }, 'Términos de uso'),
+      h('a', { href: `${site}/privacidad/`, target: '_blank', rel: 'noopener' }, 'Privacidad'),
+    ),
+    h('p', { class: 'hint' }, `© ${new Date().getFullYear()} Klever Ontaneda · Hecho en Loja, Ecuador`),
+  ]
+}
+
+function profileView() {
+  if (!settingsCache) {
+    loadSettings().then((x) => ((settingsCache = x), renderContent()))
+    return h('div', { class: 'view' }, pageHead('Su cuenta', 'Cargando…'))
+  }
+  const tab = PROFILE_TABS.some(([k]) => k === state.profileTab) ? state.profileTab : 'profile'
+  const view = h('div', { class: 'view profile' },
+    pageHead('Su cuenta', 'Perfil, ajustes y datos'),
+    h('div', { class: 'prof' },
+      h('nav', { class: 'prof-nav', 'aria-label': 'Secciones' },
+        PROFILE_TABS.map(([k, label]) => h('button', { type: 'button', class: k === tab ? 'on' : '', 'aria-current': k === tab ? 'page' : null, onclick: () => ((state.profileTab = k), renderContent()) },
+          label, k === 'about' && updateReady ? h('span', { class: 'upd-dot' }) : null))),
+      h('div', { class: 'prof-main' }, profileTabBody(tab)),
+    ),
+  )
+  queueMicrotask(paintSync)
+  return view
 }
 
 // ---------- Search + Ask ----------
@@ -1072,24 +1251,26 @@ async function loadSettings() {
   return Object.fromEntries(entries)
 }
 
-async function openSettings() {
-  const s = await loadSettings()
-  $('groq-key').value = s.groqKey
-  $('llm-key').value = s.llmKey
-  $('llm-url').value = s.llmUrl
-  $('llm-model').value = s.llmModel
-  $('stt-lang').value = s.sttLang || 'es'
-  $('settings').showModal()
+const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0'
+let updateReady = false
+let updateSW = null // set by the service worker registration (phase 5 wires the prompt)
+async function checkForUpdate() {
+  const reg = await navigator.serviceWorker?.getRegistration()
+  if (!reg) return setStatus('La app está al día.')
+  await reg.update()
+  setStatus(reg.waiting || reg.installing ? 'Descargando la versión nueva…' : 'La app está al día.')
 }
-document.querySelectorAll('.js-settings').forEach((b) => (b.onclick = openSettings))
+function applyUpdate() {
+  if (updateSW) updateSW(true)
+  else location.reload()
+}
 
-$('save-settings').onclick = async () => {
-  await settings.set('groqKey', $('groq-key').value.trim())
-  await settings.set('llmKey', $('llm-key').value.trim())
-  await settings.set('llmUrl', $('llm-url').value.trim())
-  await settings.set('llmModel', $('llm-model').value.trim())
-  await settings.set('sttLang', $('stt-lang').value)
+// Settings live in the Perfil screen (state.view = 'profile'); every field saves on change.
+const openProfile = (tab) => {
+  if (tab) state.profileTab = tab
+  return navigate('profile')
 }
+document.querySelectorAll('.js-settings').forEach((b) => (b.onclick = () => openProfile()))
 
 // ---------- backup ----------
 const blobToDataUrl = (blob) =>
@@ -1132,7 +1313,7 @@ const deserialize = async ({ id, ...raw }) => {
   }
 }
 
-$('export-btn').onclick = async () => {
+async function exportBackup() {
   await flush()
   const out = await Promise.all(state.notes.map(serialize))
   const a = h('a', {
@@ -1143,11 +1324,11 @@ $('export-btn').onclick = async () => {
   URL.revokeObjectURL(a.href)
 }
 
-$('import-input').onchange = async (e) => {
-  const file = e.target.files[0]
+async function importBackup(file) {
   if (!file) return
-  for (const item of JSON.parse(await file.text())) await notes.add(await deserialize(item))
-  e.target.value = ''
+  const items = JSON.parse(await file.text())
+  for (const item of items) await notes.add(await deserialize(item))
+  setStatus(`Se importaron ${items.length} nota${items.length === 1 ? '' : 's'}.`)
   await refresh()
 }
 
@@ -1200,11 +1381,6 @@ document.querySelectorAll('.js-pause').forEach((b) => (b.onclick = togglePause))
 // Theme: per device. 'auto' follows the system (no data-theme attribute).
 const applyTheme = (t) => (t === 'light' || t === 'dark' ? (document.documentElement.dataset.theme = t) : delete document.documentElement.dataset.theme)
 applyTheme(localStorage.getItem('theme'))
-const themePref = document.getElementById('theme-pref')
-if (themePref) {
-  themePref.value = localStorage.getItem('theme') || 'auto'
-  themePref.onchange = () => (localStorage.setItem('theme', themePref.value), applyTheme(themePref.value))
-}
 
 // Phones cannot capture another app's audio, so they always record the microphone.
 const canCapturePc = !!navigator.mediaDevices?.getDisplayMedia && !matchMedia('(max-width: 800px)').matches
@@ -2007,7 +2183,6 @@ function paintInstall() {
 }
 
 async function install() {
-  $('settings').close() // the notice would otherwise sit behind the modal
   if (!installEvent) {
     setStatus('En iPhone o iPad: toque el botón Compartir y elija “Añadir a pantalla de inicio”.')
     return
@@ -2091,17 +2266,14 @@ function paintAccount() {
   const u = state.account.user
   const cloud = state.account.mode === 'cloud'
   document.querySelectorAll('.js-account').forEach((el) => (el.hidden = !cloud))
-  $('account-box').hidden = !cloud
-  document.querySelector('.js-keys-hint').textContent = cloud
-    ? 'Sus claves se guardan solo en este dispositivo, dentro de su cuenta. Otro usuario de este equipo no las ve.'
-    : 'Las claves se guardan solo en este navegador (IndexedDB).'
+  document.body.classList.toggle('cloud', cloud)
   if (!cloud) return
   document.querySelectorAll('.js-account-name').forEach((el) => (el.textContent = u.name || u.email))
   document.querySelectorAll('.js-account-email').forEach((el) => (el.textContent = u.email))
   document.querySelectorAll('.js-avatar').forEach((img) => {
     // Only Google's https avatars; otherwise hide the image.
     if (/^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//i.test(u.picture || '')) img.src = u.picture
-    else img.hidden = true
+    else img.removeAttribute('src') // the CSS gradient stands in for the photo
   })
   paintSync()
 }
@@ -2124,9 +2296,7 @@ async function doSignOut() {
   })
   location.reload()
 }
-$('sign-out').onclick = doSignOut
-
-$('delete-account').onclick = async () => {
+async function doDeleteAccount() {
   const email = state.account.user?.email ?? ''
   const typed = prompt(`Esto borra para siempre todas sus notas, audios y archivos de la nube.\nPara confirmar, escriba su correo (${email}):`)
   if (typed?.trim().toLowerCase() !== email.toLowerCase()) return typed == null ? undefined : setStatus('El correo no coincide; no se borró nada.')
@@ -2143,7 +2313,6 @@ $('delete-account').onclick = async () => {
   })
   location.reload()
 }
-$('sync-now').onclick = () => syncNow()
 
 function onAuthLost() {
   setStatus('Su sesión expiró. Vuelva a iniciar sesión; sus cambios siguen guardados en este dispositivo.', { sticky: true })

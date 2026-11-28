@@ -377,6 +377,25 @@ ul.pts li::before { content: ''; position: absolute; left: 0; top: .62em; width:
 .modal li { display: flex; gap: 9px; }
 .modal li::before { content: '✦'; color: var(--accent); }
 
+/* source dropdown */
+.rec-wrap { position: relative; }
+.rec-big .caret { padding: 4px 8px; margin-right: -6px; border-radius: 7px; transition: background .15s; opacity: .75; }
+.rec-big .caret:hover, .rec-big .caret.open { background: color-mix(in srgb, var(--on-ink) 16%, transparent); opacity: 1; }
+.src-menu { left: 0; top: 50px; width: 290px; }
+.src-menu > div { align-items: center; gap: 11px; }
+.src-menu .oi { width: 34px; height: 34px; border-radius: 10px; background: var(--hover); display: grid; place-items: center; flex: none; color: var(--muted); }
+.src-menu .on .oi { background: var(--accent-soft); color: var(--accent); }
+.src-menu .t { display: grid; flex: 1; line-height: 1.3; }
+.src-menu .t small { color: var(--muted); font-size: 12px; }
+.src-menu .chk { color: var(--accent); }
+.lvl { display: flex; gap: 3px; margin-top: 5px; }
+.lvl i { width: 14px; height: 5px; border-radius: 2px; background: var(--press); }
+.lvl i:nth-child(-n+4) { background: var(--ok); animation: lvl 0.9s ease-in-out infinite alternate; }
+.lvl i:nth-child(5), .lvl i:nth-child(6) { animation: lvl2 0.9s ease-in-out infinite alternate; }
+@keyframes lvl { from { opacity: .45; } }
+@keyframes lvl2 { 50% { background: var(--ok); } }
+.sec { display: grid; gap: 14px; }
+
 @media (prefers-reduced-motion: reduce) { *, *::after, *::before { animation: none !important; transition: none !important; } }
 </style>
 </head>
@@ -405,6 +424,10 @@ ul.pts li::before { content: ''; position: absolute; left: 0; top: .62em; width:
     <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
     <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
     <symbol id="i-cloudoff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.5 4.5 0 0 0 7 18zM3 3l18 18"/></symbol>
+    <symbol id="i-mix" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="13" height="9" rx="2"/><path d="M6 18h5"/><rect x="16" y="8" width="5" height="9" rx="2.5"/><path d="M18.5 19v2"/></symbol>
+    <symbol id="i-screen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+    <symbol id="i-laptop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2 19h20"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/></symbol>
   </defs>
 </svg>
 
@@ -412,7 +435,7 @@ ul.pts li::before { content: ''; position: absolute; left: 0; top: .62em; width:
   <b>Quedamos · prototipo</b>
   <nav class="tabs">
     <a data-go="inicio">Inicio</a><a data-go="nota">Nota</a><a data-go="pendientes">Pendientes</a><a data-go="calendario">Calendario</a>
-    <a data-go="perfil">Perfil</a><a data-go="actualizar">Actualización</a><a data-go="login">Login</a><a data-go="estados">Hover y carga</a><a data-go="celular">Celular</a><a data-go="pdf">PDF</a>
+    <a data-go="fuente">Fuente de audio</a><a data-go="perfil">Perfil</a><a data-go="actualizar">Actualización</a><a data-go="login">Login</a><a data-go="estados">Hover y carga</a><a data-go="celular">Celular</a><a data-go="pdf">PDF</a>
   </nav>
   <div class="theme"><button data-theme-set="light">Claro</button><button data-theme-set="dark">Oscuro</button></div>
 </header>
@@ -423,7 +446,15 @@ ul.pts li::before { content: ''; position: absolute; left: 0; top: .62em; width:
 <template id="t-side">
   <aside class="side">
     <div class="brand"><span class="logo"><svg class="ico"><use href="#i-spark"/></svg></span>Quedamos</div>
-    <div class="rec-big"><span class="dot-rec"></span>Grabar<span class="caret">Mixto ▾</span></div>
+    <div class="rec-wrap"><div class="rec-big"><span class="dot-rec"></span>Grabar<span class="caret js-srcbtn" title="Elegir qué grabar">Mixto ▾</span></div>
+      <div class="menu src-menu js-srcmenu" hidden>
+        <p class="h-sec" style="padding:6px 10px 2px">¿Qué grabar?</p>
+        <div><span class="oi"><svg class="ico"><use href="#i-mic"/></svg></span><span class="t"><b>Micrófono</b><small>Solo su voz y la sala</small></span></div>
+        <div class="hl on"><span class="oi"><svg class="ico"><use href="#i-mix"/></svg></span><span class="t"><b>Mixto</b><small>Su voz + Zoom, Meet, Teams</small></span><svg class="ico chk"><use href="#i-ok"/></svg></div>
+        <div><span class="oi"><svg class="ico"><use href="#i-screen"/></svg></span><span class="t"><b>Solo la computadora</b><small>Un video, un webinar, una llamada</small></span></div>
+        <hr />
+        <div class="mic-lvl"><span class="t"><small>MacBook Pro (integrado)</small><span class="lvl"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></span><span class="muted" style="font-size:12px">Cambiar ›</span></div>
+      </div></div>
     <nav class="nav">
       <a data-go="inicio" data-k="inicio"><svg class="ico"><use href="#i-home"/></svg>Inicio</a>
       <a data-go="nota" data-k="nota"><svg class="ico"><use href="#i-notes"/></svg>Notas</a>
@@ -751,37 +782,94 @@ ul.pts li::before { content: ''; position: absolute; left: 0; top: .62em; width:
     <section class="content">
       <div class="page-h"><div><h1>Su cuenta</h1><p>Perfil, ajustes y datos</p></div></div>
       <div class="prof">
-        <nav class="prof-nav"><a class="on">Perfil</a><a>Grabación e IA</a><a>Avisos y calendario</a><a>Apariencia</a><a>Datos y privacidad</a><a>Acerca de <span class="upd-badge" style="display:inline-block;margin-left:6px"></span></a></nav>
+        <nav class="prof-nav js-profnav"><a data-sec="perfil">Perfil</a><a data-sec="grab">Grabación e IA</a><a data-sec="avisos">Avisos y calendario</a><a data-sec="apar">Apariencia</a><a data-sec="datos">Datos y privacidad</a><a data-sec="acerca">Acerca de <span class="upd-badge" style="display:inline-block;margin-left:6px"></span></a></nav>
         <div class="prof-main">
-          <div class="card"><div class="who"><span class="ava"></span><div class="grow" style="flex:1"><b>Klever Ontaneda</b><span class="muted">kleverontaneda@gmail.com · con Google</span></div><span class="sync ok"><i></i>Sincronizado hace 1 min</span></div></div>
-          <div class="grid2" style="grid-template-columns:1fr 1fr">
-            <div class="card"><p class="h-sec">Espacio usado</p><p style="font-weight:900;font-size:22px;letter-spacing:-.03em">312 MB <span class="muted" style="font-size:14px;font-weight:500">de 2 GB</span></p>
-              <div class="meter" style="margin:10px 0 8px"><i style="width:13%;background:var(--accent)"></i><i style="width:2%;background:var(--ok)"></i></div>
-              <small class="muted"><span style="color:var(--accent)">●</span> Audios 298 MB &nbsp; <span style="color:var(--ok)">●</span> Notas 14 MB</small></div>
-            <div class="card"><p class="h-sec">Este mes</p><p style="font-weight:900;font-size:22px;letter-spacing:-.03em">18 h <span class="muted" style="font-size:14px;font-weight:500">grabadas · 46 notas</span></p><small class="muted">31 pendientes encontrados · 24 completados</small></div>
+          <!-- PERFIL -->
+          <div data-s="perfil" class="sec">
+            <div class="card"><div class="who"><span class="ava"></span><div class="grow" style="flex:1"><b>Klever Ontaneda</b><span class="muted">kleverontaneda@gmail.com · entró con Google</span></div><span class="sync ok"><i></i>Sincronizado hace 1 min</span></div></div>
+            <div class="grid2" style="grid-template-columns:1fr 1fr">
+              <div class="card"><p class="h-sec">Espacio usado</p><p style="font-weight:900;font-size:22px;letter-spacing:-.03em">312 MB <span class="muted" style="font-size:14px;font-weight:500">de 2 GB</span></p>
+                <div class="meter" style="margin:10px 0 8px"><i style="width:13%;background:var(--accent)"></i><i style="width:2%;background:var(--ok)"></i></div>
+                <small class="muted"><span style="color:var(--accent)">●</span> Audios 298 MB &nbsp; <span style="color:var(--ok)">●</span> Notas 14 MB · alcanza para ~4 años</small></div>
+              <div class="card"><p class="h-sec">Este mes</p><p style="font-weight:900;font-size:22px;letter-spacing:-.03em">18 h <span class="muted" style="font-size:14px;font-weight:500">grabadas · 46 notas</span></p><small class="muted">31 pendientes encontrados · 24 completados</small></div>
+            </div>
+            <div class="card"><p class="h-sec">Datos personales</p>
+              <div class="set"><div class="grow"><b>Nombre</b><small>Así le saluda la app y aparece en el PDF</small></div><span class="sel">Klever ✎</span></div>
+              <div class="set"><div class="grow"><b>Cómo me llaman en las reuniones</b><small>Para que la IA sepa qué pendientes son suyos</small></div><span class="sel">Klever, Kléver ✎</span></div>
+              <div class="set"><div class="grow"><b>Zona horaria</b></div><span class="sel">Ecuador (GMT-5) ▾</span></div>
+            </div>
+            <div class="card"><p class="h-sec">Dispositivos conectados</p>
+              <div class="set"><svg class="ico muted"><use href="#i-laptop"/></svg><div class="grow"><b>MacBook · app de escritorio</b><small>Este dispositivo</small></div><span class="chip ok">activo</span></div>
+              <div class="set"><svg class="ico muted"><use href="#i-phone"/></svg><div class="grow"><b>Samsung Galaxy A56</b><small>Último uso: hoy 08:10 · avisos activos</small></div><button class="btn quiet sm">Desconectar</button></div>
+            </div>
           </div>
-          <div class="card"><p class="h-sec">Grabación e IA</p>
-            <div class="set"><div class="grow"><b>Idioma de las grabaciones</b><small>Evita que la IA confunda el idioma</small></div><span class="sel">Español ▾</span></div>
-            <div class="set"><div class="grow"><b>Fuente por defecto</b><small>En la computadora</small></div><span class="seg"><span>Micrófono</span><span class="on">Mixto</span><span>Solo PC</span></span></div>
-            <div class="set"><div class="grow"><b>Clave de Groq</b><small>Para transcribir · <span class="key">gsk_••••••••3f9a</span></small></div><span class="chip ok">✓ funciona</span><button class="btn ghost sm">Cambiar</button></div>
-            <div class="set"><div class="grow"><b>Clave del resumen (DeepSeek)</b><small><span class="key">sk-••••••••77c1</span></small></div><span class="chip ok">✓ funciona</span><button class="btn ghost sm">Cambiar</button></div>
+          <!-- GRABACIÓN -->
+          <div data-s="grab" class="sec">
+            <div class="card"><p class="h-sec">Grabación</p>
+              <div class="set"><div class="grow"><b>Fuente por defecto</b><small>Lo que se usa al pulsar Grabar en la computadora</small></div><span class="seg"><span>Micrófono</span><span class="on">Mixto</span><span>Solo PC</span></span></div>
+              <div class="set"><div class="grow"><b>Micrófono</b></div><span class="sel">MacBook Pro (integrado) ▾</span></div>
+              <div class="set"><div class="grow"><b>Idioma de las grabaciones</b><small>Evita que la IA confunda el idioma</small></div><span class="sel">Español ▾</span></div>
+              <div class="set"><div class="grow"><b>Calidad</b><small>Normal: ~7 MB por hora, suficiente para voz</small></div><span class="seg"><span class="on">Normal</span><span>Alta</span></span></div>
+              <div class="set"><div class="grow"><b>Guardar el audio original</b><small>Si lo apaga, solo se guarda el texto (ocupa menos)</small></div><span class="toggle on"></span></div>
+              <div class="set"><div class="grow"><b>Empezar a grabar al unirse a una reunión</b><small>Con "Unirse y grabar"</small></div><span class="toggle"></span></div>
+            </div>
+            <div class="card"><p class="h-sec">Inteligencia artificial</p>
+              <div class="set"><div class="grow"><b>Transcripción · Groq</b><small><span class="key">gsk_••••••••3f9a</span> · gratis hasta 8 h de audio al día</small></div><span class="chip ok">✓ funciona</span><button class="btn ghost sm">Cambiar</button></div>
+              <div class="set"><div class="grow"><b>Resumen · DeepSeek</b><small><span class="key">sk-••••••••77c1</span></small></div><span class="chip ok">✓ funciona</span><button class="btn ghost sm">Cambiar</button></div>
+              <div class="set"><div class="grow"><b>Organizar automáticamente</b><small>Al terminar de grabar, la IA hace resumen, pendientes y tema</small></div><span class="toggle on"></span></div>
+              <div class="set"><div class="grow"><b>Estilo del resumen</b></div><span class="seg"><span>Breve</span><span class="on">Normal</span><span>Detallado</span></span></div>
+            </div>
           </div>
-          <div class="card"><p class="h-sec">Avisos y calendario</p>
-            <div class="set"><div class="grow"><b>Avisos en este dispositivo</b><small>Aunque la app esté cerrada</small></div><span class="toggle on"></span></div>
-            <div class="set"><div class="grow"><b>Avisar antes de las reuniones</b></div><span class="sel">10 minutos ▾</span></div>
-            <div class="set"><div class="grow"><b>Calendario automático</b><small>Sus reuniones y pendientes aparecen solos en Google Calendar</small></div><span class="cal-added"><svg class="ico" style="width:15px"><use href="#i-ok"/></svg>Conectado</span><button class="btn quiet sm">Copiar enlace</button></div>
+          <!-- AVISOS -->
+          <div data-s="avisos" class="sec">
+            <div class="card"><p class="h-sec">Avisos</p>
+              <div class="set"><div class="grow"><b>Avisos en este dispositivo</b><small>Le llegan aunque la app esté cerrada</small></div><span class="toggle on"></span></div>
+              <div class="set"><div class="grow"><b>Avisar antes de las reuniones</b></div><span class="sel">10 minutos ▾</span></div>
+              <div class="set"><div class="grow"><b>Pendientes que vencen</b><small>Un aviso a la hora que elija</small></div><span class="sel">08:00 ▾</span></div>
+              <div class="set"><div class="grow"><b>Resumen del día</b><small>Lo que tiene hoy, cada mañana</small></div><span class="toggle"></span></div>
+              <div class="set"><div class="grow"><b>Probar</b><small>Envía un aviso de prueba a todos sus dispositivos</small></div><button class="btn ghost sm"><svg class="ico"><use href="#i-bell"/></svg>Enviar prueba</button></div>
+            </div>
+            <div class="card"><p class="h-sec">Calendario</p>
+              <div class="set"><div class="grow"><b>Calendario automático</b><small>Reuniones y pendientes aparecen solos en Google Calendar, Apple o Outlook</small></div><span class="cal-added"><svg class="ico" style="width:15px"><use href="#i-ok"/></svg>Conectado</span></div>
+              <div class="set"><div class="grow"><b>Enlace privado</b><small class="key">…/cal/8f3a…c21e.ics</small></div><button class="btn ghost sm"><svg class="ico"><use href="#i-copy"/></svg>Copiar</button><button class="btn quiet sm">Cambiar enlace</button></div>
+              <div class="set"><div class="grow"><b>Incluir pendientes</b><small>No solo las reuniones</small></div><span class="toggle on"></span></div>
+            </div>
           </div>
-          <div class="card"><p class="h-sec">Apariencia</p>
-            <div class="set"><div class="grow"><b>Tema</b></div><span class="seg js-themeseg"><span data-t="light">Claro</span><span data-t="dark">Oscuro</span><span data-t="auto">Automático</span></span></div>
+          <!-- APARIENCIA -->
+          <div data-s="apar" class="sec">
+            <div class="card"><p class="h-sec">Apariencia</p>
+              <div class="set"><div class="grow"><b>Tema</b><small>Automático sigue al sistema</small></div><span class="seg js-themeseg"><span data-t="light">Claro</span><span data-t="dark">Oscuro</span><span data-t="auto">Automático</span></span></div>
+              <div class="set"><div class="grow"><b>Tamaño del texto</b></div><span class="seg"><span>A−</span><span class="on">Normal</span><span>A+</span></span></div>
+              <div class="set"><div class="grow"><b>Página de inicio</b><small>Lo que se abre al entrar</small></div><span class="sel">Inicio ▾</span></div>
+              <div class="set"><div class="grow"><b>Reducir animaciones</b></div><span class="toggle"></span></div>
+            </div>
           </div>
-          <div class="card"><p class="h-sec">Datos y privacidad</p>
-            <div class="set"><div class="grow"><b>Exportar todo</b><small>Notas y transcripciones en un archivo</small></div><button class="btn ghost sm">Descargar copia</button></div>
-            <div class="set"><div class="grow"><b>Cerrar sesión</b><small>Borra las notas de este dispositivo; siguen en su cuenta</small></div><button class="btn ghost sm">Cerrar sesión</button></div>
+          <!-- DATOS -->
+          <div data-s="datos" class="sec">
+            <div class="card"><p class="h-sec">Sus datos</p>
+              <div class="set"><div class="grow"><b>Exportar todo</b><small>Notas, pendientes y transcripciones en un archivo</small></div><button class="btn ghost sm">Descargar copia</button></div>
+              <div class="set"><div class="grow"><b>Importar</b><small>Desde una copia o la versión anterior (GitHub Pages)</small></div><button class="btn ghost sm">Importar…</button></div>
+              <div class="set"><div class="grow"><b>Borrar audios viejos</b><small>Mantiene el texto, libera espacio</small></div><span class="sel">Nunca ▾</span></div>
+            </div>
+            <div class="card"><p class="h-sec">Sesión</p>
+              <div class="set"><div class="grow"><b>Cerrar sesión</b><small>Borra las notas de este dispositivo; siguen en su cuenta</small></div><button class="btn ghost sm">Cerrar sesión</button></div>
+            </div>
+            <div class="card danger-zone"><div class="set"><div class="grow"><b style="color:var(--danger)">Eliminar cuenta</b><small>Borra para siempre sus notas, audios y avisos. No se puede deshacer.</small></div><button class="btn sm" style="background:var(--danger);color:#fff">Eliminar…</button></div></div>
           </div>
-          <div class="card danger-zone"><div class="set"><div class="grow"><b style="color:var(--danger)">Eliminar cuenta</b><small>Borra para siempre sus notas, audios y avisos</small></div><button class="btn sm" style="background:var(--danger);color:#fff">Eliminar…</button></div></div>
-          <div class="card"><p class="h-sec">Acerca de</p>
-            <div class="set"><div class="grow"><b>Quedamos 1.2.0</b><small>Hay una versión nueva: 1.3.0</small></div><button class="btn accent sm">Actualizar</button></div>
-            <div class="set"><div class="grow"><b>Términos · Privacidad · Licencias</b></div><svg class="ico muted"><use href="#i-fwd"/></svg></div>
+          <!-- ACERCA -->
+          <div data-s="acerca" class="sec">
+            <div class="card"><div class="who"><span class="logo" style="width:56px;height:56px;border-radius:16px"><svg class="ico" style="width:26px;height:26px"><use href="#i-spark"/></svg></span><div><b>Quedamos</b><span class="muted">Versión 1.2.0 · Mac</span></div></div></div>
+            <div class="card"><p class="h-sec">Actualizaciones</p>
+              <div class="set"><div class="grow"><b>Hay una versión nueva: 1.3.0</b><small>Añadir al calendario con un toque, "Unirse y grabar" y más</small></div><button class="btn accent sm">Actualizar</button></div>
+              <div class="set"><div class="grow"><b>Actualizar automáticamente</b><small>Se descarga sola y se instala al reiniciar</small></div><span class="toggle on"></span></div>
+            </div>
+            <div class="card" style="padding:4px 18px">
+              <div class="set"><div class="grow"><b>Novedades</b></div><svg class="ico muted"><use href="#i-fwd"/></svg></div>
+              <div class="set"><div class="grow"><b>Ayuda y contacto</b></div><svg class="ico muted"><use href="#i-fwd"/></svg></div>
+              <div class="set"><div class="grow"><b>Términos de uso</b></div><svg class="ico muted"><use href="#i-fwd"/></svg></div>
+              <div class="set"><div class="grow"><b>Privacidad</b></div><svg class="ico muted"><use href="#i-fwd"/></svg></div>
+            </div>
+            <p class="fine">© 2026 Klever Ontaneda · Hecho en Loja, Ecuador</p>
           </div>
         </div>
       </div>
@@ -875,7 +963,8 @@ const MONTH = [
   [30],[1,'out'],[2,'out'],[3,'out',[['task','Cotización']]],[4,'out'],[5,'out'],[6,'out'],
 ]
 function render(name) {
-  const tpl = document.getElementById(`t-${name}`) || document.getElementById('t-inicio')
+  const openSrc = name === 'fuente'
+  const tpl = document.getElementById(`t-${openSrc ? 'inicio' : name}`) || document.getElementById('t-inicio')
   stage.replaceChildren(tpl.content.cloneNode(true))
   stage.querySelectorAll('[data-side]').forEach((slot) => {
     const side = document.getElementById('t-side').content.cloneNode(true)
@@ -892,6 +981,8 @@ function render(name) {
   })
   document.querySelectorAll('.review .tabs a').forEach((a) => a.classList.toggle('on', a.dataset.go === name))
   wire()
+  if (openSrc) { stage.querySelector('.recbar')?.remove(); stage.querySelector('.note-tag').textContent = 'Selector de fuente abierto (clic en "Mixto ▾" junto a Grabar) · el medidor verde muestra que el micrófono le oye'; toggleSrc(true) }
+  showSec(sessionStorage.getItem('profSec') || 'perfil')
 }
 function wire() {
   stage.querySelectorAll('[data-go]').forEach((a) => (a.onclick = () => (location.hash = a.dataset.go)))
@@ -914,6 +1005,16 @@ function wire() {
     s.onclick = () => { if (s.dataset.t !== 'auto') setTheme(s.dataset.t); render('perfil') }
   })
   stage.querySelectorAll('.toggle').forEach((t) => (t.onclick = () => t.classList.toggle('on')))
+  stage.querySelectorAll('.js-srcbtn').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); toggleSrc() }))
+  stage.querySelectorAll('.js-srcmenu > div').forEach((it) => (it.onclick = () => {
+    if (it.classList.contains('mic-lvl')) return
+    const name = it.querySelector('b').textContent
+    stage.querySelectorAll('.js-srcmenu > div').forEach((o) => { o.classList.remove('on', 'hl'); o.querySelector('.chk')?.remove() })
+    it.classList.add('on', 'hl'); it.insertAdjacentHTML('beforeend', '<svg class="ico chk"><use href="#i-ok"/></svg>')
+    stage.querySelectorAll('.js-srcbtn').forEach((b) => (b.textContent = (name === 'Solo la computadora' ? 'PC' : name) + ' ▾'))
+    setTimeout(() => toggleSrc(false), 250)
+  }))
+  stage.querySelectorAll('.js-profnav a').forEach((a) => (a.onclick = () => showSec(a.dataset.sec)))
   stage.querySelectorAll('.box').forEach((b) => (b.onclick = () => b.classList.toggle('done')))
 }
 // live animations: recording timer + processing progress
@@ -930,6 +1031,19 @@ setInterval(() => {
   document.querySelectorAll('.js-wait').forEach((e) => (e.textContent = `Groq pide esperar 0:${String(wait).padStart(2, '0')} (límite por hora). Sigue solo.`))
 }, 1000)
 
+function toggleSrc(force) {
+  const m = stage.querySelector('.js-srcmenu'); if (!m) return
+  const open = force ?? m.hidden
+  m.hidden = !open
+  stage.querySelector('.js-srcbtn')?.classList.toggle('open', open)
+}
+document.addEventListener('click', (e) => { if (!e.target.closest('.js-srcmenu')) toggleSrc(false) })
+function showSec(k) {
+  const nav = stage.querySelector('.js-profnav'); if (!nav) return
+  sessionStorage.setItem('profSec', k)
+  nav.querySelectorAll('a').forEach((a) => a.classList.toggle('on', a.dataset.sec === k))
+  stage.querySelectorAll('.sec').forEach((x) => (x.hidden = x.dataset.s !== k))
+}
 const setTheme = (t) => {
   document.documentElement.dataset.theme = t
   localStorage.setItem('mockTheme', t)

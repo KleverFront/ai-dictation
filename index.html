@@ -18,13 +18,16 @@
       <aside class="sidebar">
         <div class="brand"><span class="logo" data-icon="sparkles"></span><span>Quedamos</span></div>
 
-        <button type="button" class="record js-record">
-          <span class="dot"></span>
-          <span class="js-record-label">Grabar</span>
-          <span class="js-timer"></span>
-        </button>
+        <div class="rec-wrap">
+          <button type="button" class="record js-record">
+            <span class="dot"></span>
+            <span class="js-record-label">Grabar</span>
+            <span class="js-timer"></span>
+          </button>
+          <button type="button" class="src-btn js-src-btn" aria-haspopup="menu" aria-expanded="false" title="Elegir qué grabar"><span class="js-src-label">Micrófono</span> ▾</button>
+          <div class="menu src-menu js-src-menu" role="menu" hidden></div>
+        </div>
         <button type="button" class="ghost js-pause pause-btn" hidden><span data-icon="pause"></span><span class="js-pause-label">Pausar</span></button>
-        <select class="js-source source-select" aria-label="Qué grabar"></select>
         <button id="new-note-btn" class="ghost newnote" type="button"><span data-icon="plus"></span>Nueva nota</button>
 
         <nav class="nav" aria-label="Principal">
@@ -52,7 +55,6 @@
           </div>
           <button id="ask-btn" class="ghost" type="button" title="Hacer una pregunta sobre sus notas"><span data-icon="sparkles"></span><span class="label">Preguntar a la IA</span></button>
           <button type="button" class="ghost iconbtn js-pause pause-btn mobile-only" hidden aria-label="Pausar"><span data-icon="pause"></span><span class="js-pause-label sr-only">Pausar</span></button>
-          <select class="js-source source-select mobile-only" aria-label="Qué grabar"></select>
           <button type="button" class="ghost iconbtn js-settings" aria-label="Ajustes"><span data-icon="sliders"></span></button>
         </header>
 
@@ -60,7 +62,8 @@
           <main id="content" class="content"></main>
           <aside id="editor" class="editor" hidden>
             <div class="editor-bar">
-              <button id="editor-close" class="ghost small" type="button"><span data-icon="back"></span>Cerrar</button>
+              <button id="editor-close" class="quiet small" type="button"><span data-icon="back"></span>Cerrar</button>
+              <div class="editor-actions js-editor-actions"></div>
             </div>
             <article id="detail" class="detail"></article>
           </aside>
@@ -135,6 +138,13 @@
             <option value="en">English</option>
             <option value="pt">Português</option>
             <option value="auto">Detectar automáticamente</option>
+          </select>
+        </label>
+        <label>Tema
+          <select id="theme-pref">
+            <option value="auto">Automático (como el sistema)</option>
+            <option value="light">Claro</option>
+            <option value="dark">Oscuro</option>
           </select>
         </label>
         <p class="hint js-keys-hint">Las claves se guardan solo en este navegador (IndexedDB).</p>

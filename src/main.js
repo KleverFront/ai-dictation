@@ -45,6 +45,17 @@ const ICONS = {
   back: '<path d="m12 19-7-7 7-7M19 12H5"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
+  mix: '<rect x="2" y="5" width="13" height="9" rx="2"/><path d="M6 18h5"/><rect x="16" y="8" width="5" height="9" rx="2.5"/><path d="M18.5 19v2"/>',
+  screen: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+  bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  calplus: '<rect width="18" height="17" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 13v5M9.5 15.5h5"/>',
+  clip: '<path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+  file: '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
 }
 const svg = (name) =>
   `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] ?? ''}</svg>`
@@ -319,6 +330,28 @@ const calBtn = (ev) => {
     onclick: (e) => (e.stopPropagation(), openCalendarDialog(ev)),
   })
   b.innerHTML = svg('calendar')
+  return b
+}
+
+// One tap: on a computer it opens Google Calendar with the event filled in; on a phone it
+// hands the .ics to the share sheet (Samsung, Google, Outlook...). Other options stay in the ⋯ menu.
+const isPhone = () => matchMedia('(max-width: 800px)').matches
+async function quickCalendar(ev, btn) {
+  if (!ev) return
+  btn?.classList.add('loading')
+  if (btn) btn.innerHTML = '<span class="spinner"></span>Añadiendo…'
+  if (isPhone()) await sendToCalendar([ev], 'quedamos-evento.ics')
+  else {
+    window.open(googleCalendarUrl(ev), '_blank', 'noopener')
+    markSent([ev])
+  }
+  setTimeout(() => (renderContent(), renderEditor()), 500)
+}
+const calQuick = (ev, { label = true } = {}) => {
+  if (!ev) return null
+  if (isSent(ev))
+    return h('button', { type: 'button', class: 'cal-added', title: 'Ya está en su calendario. Toque para enviarlo otra vez.', onclick: (e) => (e.stopPropagation(), openCalendarDialog(ev)) }, ico('check'), label ? 'En su calendario' : null)
+  const b = h('button', { type: 'button', class: `${label ? 'ghost small' : 'quiet small iconbtn'} cal-quick`, title: 'Añadir al calendario', 'aria-label': 'Añadir al calendario', onclick: (e) => (e.stopPropagation(), quickCalendar(ev, e.currentTarget)) }, ico('calplus'), label ? 'Añadir al calendario' : null)
   return b
 }
 
@@ -903,13 +936,15 @@ async function openDigest(kind) {
 }
 
 const copyText = async (text, button) => {
-  const label = button.textContent
+  let ok = true
   try {
     await navigator.clipboard.writeText(text)
-    button.textContent = 'Copiado'
   } catch {
-    button.textContent = 'No se pudo copiar'
+    ok = false
   }
+  if (!button) return setStatus(ok ? 'Texto copiado.' : 'No se pudo copiar.')
+  const label = button.textContent
+  button.textContent = ok ? 'Copiado' : 'No se pudo copiar'
   setTimeout(() => (button.textContent = label), 1500)
 }
 
@@ -1026,7 +1061,8 @@ function paintRecording(recording) {
     b.querySelector('[data-icon]').innerHTML = svg(paused ? 'play' : 'pause')
     b.querySelector('.js-pause-label').textContent = paused ? 'Reanudar' : 'Pausar'
   })
-  document.querySelectorAll('.js-source').forEach((s) => (s.disabled = recording))
+  document.querySelectorAll('.js-src-btn').forEach((s) => (s.disabled = recording))
+  if (recording) closeSourceMenu()
   if (!recording) document.querySelectorAll('.js-timer').forEach((t) => (t.textContent = ''))
 }
 
@@ -1059,15 +1095,95 @@ function togglePause() {
 document.querySelectorAll('.js-pause').forEach((b) => (b.onclick = togglePause))
 
 // What to record: mic, PC audio (Zoom, Meet...) or both. Remembered between sessions.
-let recordSource = localStorage.getItem('recordSource') in SOURCES ? localStorage.getItem('recordSource') : 'mic'
-document.querySelectorAll('.js-source').forEach((sel) => {
-  sel.replaceChildren(...Object.entries(SOURCES).map(([v, label]) => new Option(label, v, false, v === recordSource)))
-  sel.onchange = () => {
-    recordSource = sel.value
-    localStorage.setItem('recordSource', recordSource)
-    document.querySelectorAll('.js-source').forEach((o) => (o.value = recordSource))
-  }
-})
+// Theme: per device. 'auto' follows the system (no data-theme attribute).
+const applyTheme = (t) => (t === 'light' || t === 'dark' ? (document.documentElement.dataset.theme = t) : delete document.documentElement.dataset.theme)
+applyTheme(localStorage.getItem('theme'))
+const themePref = document.getElementById('theme-pref')
+if (themePref) {
+  themePref.value = localStorage.getItem('theme') || 'auto'
+  themePref.onchange = () => (localStorage.setItem('theme', themePref.value), applyTheme(themePref.value))
+}
+
+// Phones cannot capture another app's audio, so they always record the microphone.
+const canCapturePc = !!navigator.mediaDevices?.getDisplayMedia && !matchMedia('(max-width: 800px)').matches
+let recordSource = canCapturePc && localStorage.getItem('recordSource') in SOURCES ? localStorage.getItem('recordSource') : 'mic'
+const SOURCE_UI = {
+  mic: { icon: 'mic', short: 'Micrófono', label: 'Micrófono', hint: 'Solo su voz y la sala' },
+  mix: { icon: 'mix', short: 'Mixto', label: 'Mixto', hint: 'Su voz + Zoom, Meet o Teams' },
+  pc: { icon: 'screen', short: 'PC', label: 'Solo la computadora', hint: 'Un video, un webinar, una llamada' },
+}
+const srcMenu = document.querySelector('.js-src-menu')
+const srcBtn = document.querySelector('.js-src-btn')
+let meter = null // live mic level while the menu is open (only if permission was already granted)
+
+function paintSource() {
+  document.querySelectorAll('.js-src-label').forEach((l) => (l.textContent = SOURCE_UI[recordSource].short))
+  srcMenu.replaceChildren(
+    h('p', { class: 'menu-h' }, '¿Qué grabar?'),
+    ...Object.entries(SOURCE_UI).map(([key, s]) => {
+      const item = h('button', { type: 'button', role: 'menuitemradio', 'aria-checked': String(key === recordSource), class: key === recordSource ? 'on' : '', onclick: () => {
+        recordSource = key
+        localStorage.setItem('recordSource', key)
+        paintSource()
+        setTimeout(closeSourceMenu, 180)
+      } }, h('span', { class: 'oi' }), h('span', { class: 't' }, h('b', {}, s.label), h('small', {}, s.hint)))
+      item.querySelector('.oi').innerHTML = svg(s.icon)
+      if (key === recordSource) item.insertAdjacentHTML('beforeend', `<span class="chk">${svg('check')}</span>`)
+      return item
+    }),
+    h('hr'),
+    h('div', { class: 'mic' }, h('span', { class: 'js-mic-name' }, 'Micrófono del sistema'), h('span', { class: 'lvl' }, ...Array.from({ length: 10 }, () => h('i')))),
+  )
+}
+async function startMeter() {
+  try {
+    if ((await navigator.permissions?.query({ name: 'microphone' }))?.state !== 'granted') return
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const ctx = new AudioContext()
+    const an = ctx.createAnalyser()
+    an.fftSize = 256
+    ctx.createMediaStreamSource(stream).connect(an)
+    const label = stream.getAudioTracks()[0]?.label
+    if (label) srcMenu.querySelector('.js-mic-name').textContent = label
+    const data = new Uint8Array(an.fftSize)
+    meter = { stream, ctx, raf: 0 }
+    const tick = () => {
+      an.getByteTimeDomainData(data)
+      const peak = data.reduce((m, v) => Math.max(m, Math.abs(v - 128)), 0) / 128
+      const lit = Math.min(10, Math.round(peak * 22))
+      srcMenu.querySelectorAll('.lvl i').forEach((i, k) => i.classList.toggle('on', k < lit))
+      meter.raf = requestAnimationFrame(tick)
+    }
+    tick()
+  } catch {}
+}
+function stopMeter() {
+  if (!meter) return
+  cancelAnimationFrame(meter.raf)
+  meter.stream.getTracks().forEach((t) => t.stop())
+  meter.ctx.close()
+  meter = null
+}
+function closeSourceMenu() {
+  if (srcMenu.hidden) return
+  srcMenu.hidden = true
+  srcBtn.classList.remove('open')
+  srcBtn.setAttribute('aria-expanded', 'false')
+  stopMeter()
+}
+srcBtn.hidden = !canCapturePc
+srcBtn.onclick = (e) => {
+  e.stopPropagation()
+  if (!srcMenu.hidden) return closeSourceMenu()
+  paintSource()
+  srcMenu.hidden = false
+  srcBtn.classList.add('open')
+  srcBtn.setAttribute('aria-expanded', 'true')
+  startMeter()
+}
+document.addEventListener('click', (e) => !e.target.closest('.js-src-menu') && closeSourceMenu())
+document.addEventListener('keydown', (e) => e.key === 'Escape' && closeSourceMenu())
+paintSource()
 
 // noteId: keep recording into an existing note instead of creating a new one.
 async function toggleRecording(noteId = null) {
@@ -1425,6 +1541,8 @@ function tasksView(n) {
   })
   const edit = (i, key) => (e) =>
     schedule(`task-${key}-${n.id}-${i}`, () => patchNote(n.id, (x) => (x.tasks[i][key] = e.target.value)).then(renderContent))
+  const taskEvents = calendarEvents([{ ...n, remindAt: null }])
+  const evFor = (t) => (t.done || !t.dueDate ? null : taskEvents.find((ev) => ev.title === `Pendiente: ${t.text}` && ev.day === t.dueDate))
   return h('section', {},
     h('h3', {}, 'Pendientes'),
     h('ul', { class: 'plain' },
@@ -1433,7 +1551,8 @@ function tasksView(n) {
           h('input', { type: 'checkbox', checked: t.done, 'aria-label': 'Marcar como hecho', onchange: (e) => toggleTask(n.id, i, e.target.checked) }),
           h('input', { class: 'task-text', value: t.text, oninput: edit(i, 'text') }),
           h('input', { class: 'task-owner', value: t.owner ?? '', placeholder: 'Responsable', oninput: edit(i, 'owner') }),
-          h('input', { class: 'task-date', type: 'date', value: t.dueDate ?? '', 'aria-label': 'Fecha límite', onchange: (e) => patchNote(n.id, (x) => (x.tasks[i].dueDate = e.target.value)).then(() => renderContent()) }),
+          h('input', { class: 'task-date', type: 'date', value: t.dueDate ?? '', 'aria-label': 'Fecha límite', onchange: (e) => patchNote(n.id, (x) => (x.tasks[i].dueDate = e.target.value)).then(() => (renderContent(), renderEditor())) }),
+          calQuick(evFor(t), { label: false }),
           h('button', {
             type: 'button',
             class: 'x',
@@ -1452,10 +1571,12 @@ function tasksView(n) {
   )
 }
 
+// "Unirse" stands out (green) only when the meeting starts within 15 minutes or is running.
+const joinSoon = (n) => n.remindAt && n.remindAt - Date.now() < 15 * 60e3 && Date.now() - n.remindAt < 2 * 3600e3
 const joinBtn = (n, { small = true } = {}) => {
   const link = safeMeetingUrl(n.meetingUrl || '')
   if (!link) return null
-  return h('a', { class: `button join${small ? ' small' : ''}`, href: link, target: '_blank', rel: 'noopener noreferrer', title: link }, `Unirse a ${meetingLabel(link)}`)
+  return h('a', { class: `button${joinSoon(n) ? ' join' : ' ghost-link'}${small ? ' small' : ''}`, href: link, target: '_blank', rel: 'noopener noreferrer', title: link }, joinSoon(n) ? `Unirse a ${meetingLabel(link)}` : 'Unirse')
 }
 
 const BEFORE = [[0, 'A la hora'], [5, '5 min antes'], [10, '10 min antes'], [15, '15 min antes'], [30, '30 min antes'], [60, '1 hora antes'], [1440, '1 día antes']]
@@ -1476,8 +1597,26 @@ function reminderView(n) {
       await renderEditor()
     },
   })
+  const beforeLabel = (BEFORE.find(([v]) => v === (Number(n.remindBefore) || 0)) ?? BEFORE[0])[1].toLowerCase()
+  const link = safeMeetingUrl(n.meetingUrl || '')
+  const ev = n.remindAt ? calendarEvents([{ ...n, tasks: [] }])[0] : null
+  const editing = state.editReminder === n.id
+  const toggleEdit = () => ((state.editReminder = editing ? null : n.id), renderEditor())
+  const strip = n.remindAt
+    ? h('div', { class: 'remind-strip' },
+        ico('bell'),
+        h('div', { class: 'grow' },
+          h('b', {}, `${dayLabel(dayKey(n.remindAt))} ${fmtTime(n.remindAt)}`), ` · aviso ${beforeLabel}`,
+          link ? h('small', {}, `${meetingLabel(link)} · ${link.replace(/^https?:\/\//, '')}`) : null,
+        ),
+        joinBtn(n),
+        calQuick(ev),
+        h('button', { type: 'button', class: 'quiet small', onclick: toggleEdit }, editing ? 'Listo' : 'Cambiar'),
+      )
+    : h('button', { type: 'button', class: 'quiet small add-remind', onclick: toggleEdit }, ico('bell'), editing ? 'Cerrar recordatorio' : 'Poner un recordatorio')
+  if (!editing) return strip
   return h('section', { class: 'reminder-box' },
-    h('h3', {}, 'Recordatorio'),
+    strip,
     h('div', { class: 'meta' },
       h('label', {}, h('span', {}, 'Fecha y hora'),
         h('input', { type: 'datetime-local', value: n.remindAt ? toLocalInput(n.remindAt) : '', onchange: (e) => setReminder(n.id, e.target.value).then(renderEditor) }),
@@ -1499,17 +1638,62 @@ function reminderView(n) {
       ? h('p', { class: 'hint' }, 'Encontré un enlace en la nota: ',
           h('button', { type: 'button', class: 'linkbtn', onclick: async () => { await patchNote(n.id, (x) => (x.meetingUrl = detected)); await renderEditor() } }, `usar ${meetingLabel(detected)}`))
       : null,
-    n.remindAt || n.meetingUrl
-      ? h('div', { class: 'row' },
-          joinBtn(n),
-          n.remindAt
-            ? h('button', { type: 'button', class: 'ghost small', title: 'Añadir este recordatorio al calendario del celular', onclick: () => openCalendarDialog(calendarEvents([{ ...n, tasks: [] }])[0]) },
-                h('span', { 'data-icon': 'calendar' }), 'Al calendario')
-            : null,
-        )
+    n.remindAt
+      ? h('button', { type: 'button', class: 'quiet small danger', onclick: async () => {
+          await patchNote(n.id, (x) => ((x.remindAt = null), (x.reminded = false)))
+          state.editReminder = null
+          renderContent()
+          await renderEditor()
+        } }, 'Quitar recordatorio')
       : null,
   )
 }
+
+// Compact one-line summary of the details; tapping it opens the full form.
+function metaLine(n) {
+  const open = state.editMeta === n.id
+  const bits = [
+    typeLabel(n.type),
+    h('b', {}, `${dayLabel(dayKey(when(n)))} ${fmtTime(when(n))}`),
+    themeOf(n) ? h('span', { class: 'chip theme' }, themeOf(n)) : null,
+    n.project ? n.project : null,
+    n.type === 'meeting' && n.participants ? n.participants : null,
+    ...(n.tags ?? []).map((t) => `#${t}`),
+  ].filter(Boolean)
+  const line = h('button', { type: 'button', class: 'meta-line', title: 'Editar detalles', onclick: () => ((state.editMeta = open ? null : n.id), renderEditor()) },
+    ...bits.flatMap((b, i) => (i ? [h('span', { class: 'sep' }, '·'), b] : [b])),
+    h('span', { class: 'meta-edit' }, ico('edit')),
+  )
+  return open ? h('div', { class: 'meta-open' }, line, metaView(n)) : line
+}
+
+// ⋯ menu with the less frequent actions.
+function noteMenu(n, fileInput) {
+  const ev = n.remindAt ? calendarEvents([{ ...n, tasks: [] }])[0] : null
+  const item = (icon, label, fn, cls = '') => {
+    const b = h('button', { type: 'button', role: 'menuitem', class: cls, onclick: (e) => (closeNoteMenu(), fn(e)) }, ico(icon), label)
+    return b
+  }
+  return h('div', { class: 'menu note-menu js-note-menu', role: 'menu', hidden: true },
+    ev ? item('calplus', 'Añadir a otro calendario…', () => openCalendarDialog(ev)) : null,
+    item('bell', n.remindAt ? 'Cambiar recordatorio' : 'Poner un recordatorio', () => ((state.editReminder = n.id), renderEditor())),
+    item('clip', 'Adjuntar archivo', () => fileInput.click()),
+    item('copy', 'Copiar texto', () => copyText(noteToText(n))),
+    item('file', 'Exportar PDF', () => window.print()),
+    item('edit', 'Editar detalles', () => ((state.editMeta = n.id), renderEditor())),
+    h('hr'),
+    item('trash', 'Eliminar nota', () => removeNote(n.id), 'danger'),
+  )
+}
+function closeNoteMenu() {
+  const m = document.querySelector('.js-note-menu')
+  if (m && !m.hidden) {
+    m.hidden = true
+    document.querySelector('.js-more')?.classList.remove('open')
+  }
+}
+document.addEventListener('click', (e) => !e.target.closest('.js-note-menu, .js-more') && closeNoteMenu())
+document.addEventListener('keydown', (e) => e.key === 'Escape' && closeNoteMenu())
 
 function metaView(n) {
   const projects = [...new Set(state.notes.map((x) => x.project).filter(Boolean))]
@@ -1569,6 +1753,7 @@ async function renderEditor() {
   const el = $('detail')
   if (!n) {
     el.replaceChildren()
+    document.querySelector('.js-editor-actions').replaceChildren()
     return
   }
   // Synced from another device: fetch its audio/files once, then draw again.
@@ -1592,11 +1777,11 @@ async function renderEditor() {
 
   const draftBanner =
     isStructured(s) && s.confirmed === false
-      ? h('div', { class: 'banner' },
-          h('span', {}, 'Borrador de IA. Revíselo, edítelo y luego confirme. Su texto original no se modificó.'),
+      ? h('div', { class: 'draft' },
+          h('span', {}, h('b', {}, '● Borrador de la IA: '), 'revíselo y confirme. Su texto original no se modificó.'),
           h('button', {
             type: 'button',
-            class: 'small',
+            class: 'ghost small',
             onclick: async () => {
               await patchNote(n.id, (x) => (x.summary.confirmed = true))
               renderContent()
@@ -1606,58 +1791,67 @@ async function renderEditor() {
         )
       : null
 
+  // Top bar: only the two main actions; the rest live in the ⋯ menu.
+  const busyNow = busy.has(n.id)
+  const menu = noteMenu(n, fileInput)
+  const more = h('button', { type: 'button', class: 'ghost small iconbtn js-more', 'aria-label': 'Más acciones', 'aria-haspopup': 'menu', onclick: (e) => {
+    e.stopPropagation()
+    const m = document.querySelector('.js-note-menu')
+    m.hidden = !m.hidden
+    e.currentTarget.classList.toggle('open', !m.hidden)
+  } }, ico('more'))
+  document.querySelector('.js-editor-actions').replaceChildren(
+    fileInput,
+    session
+      ? null
+      : h('button', { type: 'button', class: 'ghost small', title: 'Graba más audio y lo añade a esta misma nota', onclick: () => toggleRecording(n.id) },
+          ico('mic'), n.audio ? 'Seguir grabando' : 'Grabar aquí'),
+    h('button', {
+      type: 'button',
+      class: `small ai-btn${busyNow ? ' loading' : ''}`,
+      disabled: busyNow,
+      onclick: async () => {
+        if (isStructured(s) && !confirm('Esto reemplaza el resumen de IA por un nuevo borrador. Se conservan su texto, pendientes y adjuntos. ¿Continuar?')) return
+        const run = processNote(n.id)
+        setTimeout(renderEditor, 60) // processNote marks the note busy after loading settings
+        await run
+        renderEditor()
+      },
+    }, busyNow ? h('span', { class: 'spinner' }) : ico('sparkles'), busyNow ? 'Procesando…' : isStructured(s) ? 'Regenerar' : 'Organizar con IA'),
+    h('span', { class: 'more-wrap' }, more, menu),
+  )
+
   // replaceChildren turns null into the text "null", so drop the empty sections first.
   el.replaceChildren(...[
-    h('header', {},
-      h('div', { class: 'grow' },
-        h('p', { class: 'eyebrow' }, `${typeLabel(n.type)} · ${fmtDay(dayKey(when(n)))} · ${fmtTime(when(n))}`),
-        h('input', {
-          class: 'title-input',
-          value: n.title || (isStructured(s) ? s.title : ''),
-          placeholder: 'Nota sin título',
-          oninput: (e) => schedule(`title-${n.id}`, () => patchNote(n.id, (x) => (x.title = e.target.value)).then(renderContent)),
-        }),
-      ),
+    h('header', { class: 'note-head' },
+      h('textarea', {
+        class: 'title-input',
+        rows: 1,
+        placeholder: 'Nota sin título',
+        oninput: (e) => (autosize(e.target), schedule(`title-${n.id}`, () => patchNote(n.id, (x) => (x.title = e.target.value)).then(renderContent))),
+        onkeydown: (e) => e.key === 'Enter' && (e.preventDefault(), e.target.blur()),
+      }, n.title || (isStructured(s) ? s.title : '')),
+      h('button', { type: 'button', class: `quiet iconbtn star-btn ${n.pinned ? 'on' : ''}`, title: n.pinned ? 'Quitar de fijadas' : 'Fijar', 'aria-label': n.pinned ? 'Quitar de fijadas' : 'Fijar', 'aria-pressed': String(!!n.pinned), onclick: () => togglePin(n.id) }, ico('star')),
     ),
-    h('div', { class: 'toolbar' },
-      fileInput,
-      h('button', {
-        type: 'button',
-        class: 'small ai-btn',
-        onclick: async () => {
-          if (isStructured(s) && !confirm('Esto reemplaza el resumen de IA por un nuevo borrador. Se conservan su texto, pendientes y adjuntos. ¿Continuar?')) return
-          await processNote(n.id)
-        },
-      }, h('span', { 'data-icon': 'sparkles' }), isStructured(s) ? 'Regenerar con IA' : 'Organizar con IA'),
-      h('button', { type: 'button', class: `ghost small pin-toggle ${n.pinned ? 'on' : ''}`, onclick: () => togglePin(n.id) },
-        h('span', { 'data-icon': 'star' }), n.pinned ? 'Fijada' : 'Fijar'),
-      session
-        ? null
-        : h('button', { type: 'button', class: 'ghost small', title: 'Graba más audio y lo añade a esta misma nota', onclick: () => toggleRecording(n.id) },
-            h('span', { 'data-icon': 'mic' }), n.audio ? 'Seguir grabando' : 'Grabar aquí'),
-      h('button', { type: 'button', class: 'ghost small', onclick: () => fileInput.click() }, 'Adjuntar'),
-      joinBtn(n),
-      h('button', { type: 'button', class: 'ghost small', onclick: (e) => copyText(noteToText(n), e.currentTarget) }, 'Copiar'),
-      h('button', { type: 'button', class: 'ghost small', onclick: () => window.print() }, 'PDF'),
-      h('button', { type: 'button', class: 'ghost small danger', onclick: () => removeNote(n.id) }, 'Eliminar'),
-    ),
-    metaView(n),
+    metaLine(n),
     reminderView(n),
-    h('section', {},
-      h('h3', {}, 'Notas'),
-      field(n.body ?? '', saveField(n.id, 'body', (x, v) => (x.body = v)), { placeholder: 'Escriba aquí. Pegue una imagen o suelte archivos para adjuntarlos.', cls: 'body-field' }),
-    ),
-    attachmentsView(n),
     draftBanner,
     isStructured(s)
       ? h('section', {}, h('h3', {}, 'Resumen'), field(s.overview ?? '', saveField(n.id, 'overview', (x, v) => (x.summary.overview = v)), { cls: 'overview' }))
       : s
         ? h('section', {}, h('h3', {}, 'Resumen'), h('pre', {}, s))
         : null,
-    isStructured(s) ? listField(n, 'points', 'Puntos clave') : null,
-    isStructured(s) ? listField(n, 'decisions', 'Decisiones') : null,
-    tasksView(n),
+    // Tasks next to decisions/points when the panel is wide enough (container query in CSS).
+    h('div', { class: 'note-cols' },
+      tasksView(n),
+      isStructured(s) ? h('div', { class: 'note-side' }, listField(n, 'decisions', 'Decisiones'), listField(n, 'points', 'Puntos clave')) : null,
+    ),
     isStructured(s) && s.inferred?.length ? listField(n, 'inferred', 'Inferido (no se dijo explícitamente)', 'inferred') : null,
+    h('section', {},
+      h('h3', {}, 'Notas'),
+      field(n.body ?? '', saveField(n.id, 'body', (x, v) => (x.body = v)), { placeholder: 'Escriba aquí. Pegue una imagen o suelte archivos para adjuntarlos.', cls: 'body-field' }),
+    ),
+    attachmentsView(n),
     n.audio || n.transcript ? transcriptBox : null,
     n.audio ? h('audio', { controls: true, src: (audioUrl = URL.createObjectURL(n.audio)) }) : null,
     !n.audio && n.audioKey ? h('p', { class: 'hint' }, 'Descargando el audio de la nube…') : null,
